@@ -81,17 +81,6 @@ aws s3 ls "s3://${DESTINATION_BUCKET}/converted/" \
   --region "${AWS_REGION}"
 ```
 
-Copy one listed `batch-*.json` object locally and inspect it:
-
-```bash
-OUTPUT_KEY="converted/<source-version-or-event-sequencer>/SAMPLE.csv/batch-000000.json"
-
-aws s3 cp \
-  "s3://${DESTINATION_BUCKET}/${OUTPUT_KEY}" \
-  - \
-  --region "${AWS_REGION}"
-```
-
 Each output is a JSON array with camelCase properties derived from the `SAMPLE.csv` header:
 
 ```json
@@ -114,19 +103,8 @@ Get the names of the deployed functions:
 DISPATCHER_FUNCTION=$(terraform -chdir=terraform output -raw dispatcher_lambda_name)
 PROCESSOR_FUNCTION=$(terraform -chdir=terraform output -raw processor_lambda_name)
 
-aws logs filter-log-events \
-  --log-group-name "/aws/lambda/${DISPATCHER_FUNCTION}" \
-  --start-time $(( $(date +%s) * 1000 - 300000 )) \
-  --query 'events[].message' \
-  --output text \
-  --region "${AWS_REGION}"
-
-aws logs filter-log-events \
-  --log-group-name "/aws/lambda/${PROCESSOR_FUNCTION}" \
-  --start-time $(( $(date +%s) * 1000 - 300000 )) \
-  --query 'events[].message' \
-  --output text \
-  --region "${AWS_REGION}"
+aws logs tail /aws/lambda/${DISPATCHER_FUNCTION} --since 15m
+aws logs tail /aws/lambda/${PROCESSOR_FUNCTION} --since 15m
 ```
 
 The dispatcher logs report the source object’s data-line and batch counts. The processor logs report each destination JSON object and its record count.
