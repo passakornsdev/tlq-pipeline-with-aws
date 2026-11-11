@@ -5,6 +5,8 @@ locals {
   dispatcher_name         = "${var.project_name}-dispatcher"
   processor_name          = "${var.project_name}-processor"
   database_name           = "${var.project_name}-aurora"
+  vpc_cidr                = "10.0.0.0/16"
+  subnet_cidrs            = ["10.0.1.0/24", "10.0.2.0/24"]
   common_tags = merge(var.tags, {
     Project = var.project_name
   })
@@ -12,15 +14,54 @@ locals {
 
 resource "time_static" "deployment_date" {}
 
-data "aws_vpc" "default" {
-  default = true
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
-data "aws_subnets" "default_vpc" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
+resource "aws_vpc" "app" {
+  cidr_block           = local.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  tags                 = local.common_tags
+}
+
+resource "aws_internet_gateway" "app" {
+  vpc_id = aws_vpc.app.id
+  tags   = local.common_tags
+}
+
+resource "aws_subnet" "public" {
+  count             = length(local.subnet_cidrs)
+  vpc_id            = aws_vpc.app.id
+  cidr_block        = local.subnet_cidrs[count.index]
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  map_public_ip_on_launch = true
+  tags              = merge(local.common_tags, { Tier = "public" })
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.app.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.app.id
   }
+
+  tags = local.common_tags
+}
+
+resource "aws_route_table_association" "public" {
+  count          = length(aws_subnet.public)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.app.id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.public.id]
+  tags              = local.common_tags
 }
 
 resource "aws_s3_bucket" "source" {
@@ -205,6 +246,65 @@ resource "aws_iam_role_policy" "processor" {
   })
 }
 
+resource "aws_iam_role_policy_attachment" "dispatcher_vpc_access" {
+  role       = aws_iam_role.dispatcher.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "processor_vpc_access" {
+  role       = aws_iam_role.processor.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_security_group" "lambda" {
+  name        = "${var.project_name}-lambda"
+  description = "Allow outbound access for VPC-connected Lambda functions."
+  vpc_id      = aws_vpc.app.id
+  tags        = local.common_tags
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "vpc_endpoints" {
+  name        = "${var.project_name}-vpc-endpoints"
+  description = "Allow Lambda access to VPC interface endpoints."
+  vpc_id      = aws_vpc.app.id
+  tags        = local.common_tags
+
+  ingress {
+    description     = "HTTPS from Lambda."
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda.id]
+  }
+}
+
+resource "aws_vpc_endpoint" "lambda" {
+  vpc_id              = aws_vpc.app.id
+  service_name        = "com.amazonaws.${var.aws_region}.lambda"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.public[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+  tags                = local.common_tags
+}
+
+resource "aws_vpc_endpoint" "logs" {
+  vpc_id              = aws_vpc.app.id
+  service_name        = "com.amazonaws.${var.aws_region}.logs"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.public[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+  tags                = local.common_tags
+}
+
 resource "aws_lambda_function" "processor" {
   function_name = local.processor_name
   role          = aws_iam_role.processor.arn
@@ -218,9 +318,15 @@ resource "aws_lambda_function" "processor" {
   timeout     = 900
   tags        = local.common_tags
 
+  vpc_config {
+    subnet_ids         = aws_subnet.public[*].id
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
   depends_on = [
     aws_cloudwatch_log_group.processor,
-    aws_iam_role_policy.processor
+    aws_iam_role_policy.processor,
+    aws_iam_role_policy_attachment.processor_vpc_access
   ]
 }
 
@@ -237,6 +343,11 @@ resource "aws_lambda_function" "dispatcher" {
   timeout     = 900
   tags        = local.common_tags
 
+  vpc_config {
+    subnet_ids         = aws_subnet.public[*].id
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
   environment {
     variables = {
       DESTINATION_BUCKET      = aws_s3_bucket.destination.bucket
@@ -246,7 +357,8 @@ resource "aws_lambda_function" "dispatcher" {
 
   depends_on = [
     aws_cloudwatch_log_group.dispatcher,
-    aws_iam_role_policy.dispatcher
+    aws_iam_role_policy.dispatcher,
+    aws_iam_role_policy_attachment.dispatcher_vpc_access
   ]
 }
 
@@ -272,22 +384,22 @@ resource "aws_s3_bucket_notification" "source" {
 
 resource "aws_db_subnet_group" "aurora" {
   name       = local.database_name
-  subnet_ids = data.aws_subnets.default_vpc.ids
+  subnet_ids = aws_subnet.public[*].id
   tags       = local.common_tags
 }
 
 resource "aws_security_group" "aurora" {
   name        = local.database_name
-  description = "Allow Aurora MySQL access from the default VPC."
-  vpc_id      = data.aws_vpc.default.id
+  description = "Allow Aurora MySQL access from the VPC Lambda functions."
+  vpc_id      = aws_vpc.app.id
   tags        = local.common_tags
 
   ingress {
-    description = "Aurora MySQL from the default VPC."
-    from_port   = 3306
-    to_port     = 3306
-    protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.default.cidr_block]
+    description     = "Aurora MySQL from Lambda."
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda.id]
   }
 
   egress {
