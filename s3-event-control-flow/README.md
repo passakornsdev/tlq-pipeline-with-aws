@@ -27,7 +27,7 @@ terraform apply
 Terraform reads `target/s3-event-control-flow-lambda.jar`, so run `mvn package` before the first apply and after changing Java source.
 Terraform appends the initial deployment date in `YYYYMMDD` format to each bucket base name.
 
-Set `db_password` in `terraform.tfvars` (or provide it interactively) to the password used by both Aurora and the loader Lambda. The loader receives `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` through its Lambda environment.
+Set `db_password` in `terraform.tfvars` (or provide it interactively) to the password used by Aurora and the RDS Proxy. The loader receives the RDS Proxy endpoint through `DB_HOST`, along with `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` through its Lambda environment.
 
 ## Input and output contract
 

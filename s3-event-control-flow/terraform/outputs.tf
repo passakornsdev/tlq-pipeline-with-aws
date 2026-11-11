@@ -27,3 +27,8 @@ output "aurora_endpoint" {
   description = "Aurora MySQL writer endpoint."
   value       = module.aurora.endpoint
 }
+
+output "aurora_proxy_endpoint" {
+  description = "Aurora RDS Proxy endpoint used by the loader Lambda."
+  value       = module.aurora.proxy_endpoint
+}

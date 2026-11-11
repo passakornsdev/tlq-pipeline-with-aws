@@ -34,7 +34,7 @@ destination_bucket_name = "my-unique-json-destination"
 ```
 
 Terraform appends the deployment creation date in `YYYYMMDD` format to each base name. For example, the source bucket created on November 8, 2026 is `my-unique-csv-source-20261108`. The date remains stable for the Terraform state after creation.
-The loader uses the same `db_password` for the Aurora `admin` user and its `DB_PASSWORD` Lambda environment variable. If the setting is omitted, Terraform prompts for it.
+The loader connects through the Aurora RDS Proxy. The same `db_password` is used for the Aurora `admin` user, the proxy’s Secrets Manager credential, and the loader’s `DB_PASSWORD` environment variable. If the setting is omitted, Terraform prompts for it.
 
 `terraform.tfvars` is ignored by Git, so account-specific bucket base names are not committed.
 

@@ -35,7 +35,7 @@ module "lambda" {
   destination_bucket_arn   = module.s3.destination_bucket_arn
   subnet_ids               = module.vpc.public_subnet_ids
   lambda_security_group_id = module.vpc.lambda_security_group_id
-  db_host                  = module.aurora.endpoint
+  db_host                  = module.aurora.proxy_endpoint
   db_port                  = var.db_port
   db_name                  = var.db_name
   db_user                  = var.db_user
