@@ -149,6 +149,11 @@ resource "aws_iam_role_policy" "loader" {
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:GetObjectVersion"]
         Resource = "${var.destination_bucket_arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.db_secret_arn
       }
     ]
   })
@@ -240,11 +245,10 @@ resource "aws_lambda_function" "loader" {
 
   environment {
     variables = {
-      DB_HOST     = var.db_host
-      DB_PORT     = tostring(var.db_port)
-      DB_NAME     = var.db_name
-      DB_USER     = var.db_user
-      DB_PASSWORD = var.db_password
+      DB_HOST       = var.db_host
+      DB_PORT       = tostring(var.db_port)
+      DB_NAME       = var.db_name
+      DB_SECRET_ARN = var.db_secret_arn
     }
   }
 

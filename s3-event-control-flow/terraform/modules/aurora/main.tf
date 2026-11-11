@@ -31,18 +31,18 @@ resource "aws_security_group" "aurora" {
 }
 
 resource "aws_rds_cluster" "aurora" {
-  cluster_identifier      = local.database_name
-  engine                  = "aurora-mysql"
-  database_name           = "tlq"
-  master_username         = "admin"
-  master_password         = var.password
-  db_subnet_group_name    = aws_db_subnet_group.aurora.name
-  vpc_security_group_ids  = [aws_security_group.aurora.id]
-  storage_encrypted       = true
-  backup_retention_period = 7
-  skip_final_snapshot     = true
-  deletion_protection     = false
-  tags                    = var.tags
+  cluster_identifier          = local.database_name
+  engine                      = "aurora-mysql"
+  database_name               = "tlq"
+  master_username             = "admin"
+  manage_master_user_password = true
+  db_subnet_group_name        = aws_db_subnet_group.aurora.name
+  vpc_security_group_ids      = [aws_security_group.aurora.id]
+  storage_encrypted           = true
+  backup_retention_period     = 7
+  skip_final_snapshot         = true
+  deletion_protection         = false
+  tags                        = var.tags
 }
 
 resource "aws_rds_cluster_instance" "aurora_writer" {
@@ -77,19 +77,6 @@ resource "aws_security_group" "proxy" {
   }
 }
 
-resource "aws_secretsmanager_secret" "aurora" {
-  name = "${local.database_name}-credentials"
-  tags = var.tags
-}
-
-resource "aws_secretsmanager_secret_version" "aurora" {
-  secret_id = aws_secretsmanager_secret.aurora.id
-  secret_string = jsonencode({
-    username = "admin"
-    password = var.password
-  })
-}
-
 resource "aws_iam_role" "proxy" {
   name = "${local.database_name}-proxy-role"
 
@@ -117,7 +104,7 @@ resource "aws_iam_role_policy" "proxy" {
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = aws_secretsmanager_secret.aurora.arn
+        Resource = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
       },
       {
         Effect   = "Allow"
@@ -141,13 +128,10 @@ resource "aws_db_proxy" "aurora" {
   auth {
     auth_scheme = "SECRETS"
     iam_auth    = "DISABLED"
-    secret_arn  = aws_secretsmanager_secret.aurora.arn
+    secret_arn  = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
   }
 
-  depends_on = [
-    aws_iam_role_policy.proxy,
-    aws_secretsmanager_secret_version.aurora
-  ]
+  depends_on = [aws_iam_role_policy.proxy]
 }
 
 resource "aws_db_proxy_default_target_group" "aurora" {

@@ -30,11 +30,10 @@ Edit `terraform.tfvars` with your region and globally unique bucket base names:
 aws_region              = "us-west-2"
 source_bucket_name      = "my-unique-csv-source"
 destination_bucket_name = "my-unique-json-destination"
-# db_password = "replace-with-a-secure-password"
 ```
 
 Terraform appends the deployment creation date in `YYYYMMDD` format to each base name. For example, the source bucket created on November 8, 2026 is `my-unique-csv-source-20261108`. The date remains stable for the Terraform state after creation.
-The loader connects through the Aurora RDS Proxy. The same `db_password` is used for the Aurora `admin` user, the proxy’s Secrets Manager credential, and the loader’s `DB_PASSWORD` environment variable. If the setting is omitted, Terraform prompts for it.
+The loader connects through the Aurora RDS Proxy. Aurora manages the `admin` password in Secrets Manager, and the loader reads that secret at runtime using its `DB_SECRET_ARN` environment variable.
 
 `terraform.tfvars` is ignored by Git, so account-specific bucket base names are not committed.
 

@@ -32,3 +32,8 @@ output "aurora_proxy_endpoint" {
   description = "Aurora RDS Proxy endpoint used by the loader Lambda."
   value       = module.aurora.proxy_endpoint
 }
+
+output "aurora_secret_arn" {
+  description = "ARN of the Aurora-managed Secrets Manager database credentials secret."
+  value       = module.aurora.secret_arn
+}

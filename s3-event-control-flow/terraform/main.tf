@@ -38,8 +38,7 @@ module "lambda" {
   db_host                  = module.aurora.proxy_endpoint
   db_port                  = var.db_port
   db_name                  = var.db_name
-  db_user                  = var.db_user
-  db_password              = var.db_password
+  db_secret_arn            = module.aurora.secret_arn
   lambda_filename          = "${path.root}/../target/s3-event-control-flow-lambda.jar"
   tags                     = local.common_tags
 }
@@ -49,7 +48,6 @@ module "aurora" {
 
   project_name             = var.project_name
   instance_class           = var.aurora_instance_class
-  password                 = var.db_password
   subnet_ids               = module.vpc.public_subnet_ids
   vpc_id                   = module.vpc.vpc_id
   lambda_security_group_id = module.vpc.lambda_security_group_id

@@ -1,8 +1,6 @@
 aws_region              = "us-east-2"
 source_bucket_name      = "tcss-562-csv-source"
 destination_bucket_name = "tcss-562-json-destination"
-# Terraform prompts for this value if it is not set here.
-# db_password = "replace-with-a-secure-password"
 
 tags = {
   Environment = "development"

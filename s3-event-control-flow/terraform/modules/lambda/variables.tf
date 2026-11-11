@@ -48,15 +48,9 @@ variable "db_name" {
   type        = string
 }
 
-variable "db_user" {
-  description = "Aurora database username for the loader Lambda."
+variable "db_secret_arn" {
+  description = "Secrets Manager ARN containing the Aurora credentials."
   type        = string
-}
-
-variable "db_password" {
-  description = "Aurora database password for the loader Lambda."
-  type        = string
-  sensitive   = true
 }
 
 variable "lambda_filename" {
