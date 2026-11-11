@@ -17,3 +17,13 @@ output "processor_lambda_name" {
   description = "Name of the batch processor Lambda function."
   value       = aws_lambda_function.processor.function_name
 }
+
+output "aurora_endpoint" {
+  description = "Aurora MySQL writer endpoint."
+  value       = aws_rds_cluster.aurora.endpoint
+}
+
+output "aurora_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing the Aurora master credentials."
+  value       = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
+}

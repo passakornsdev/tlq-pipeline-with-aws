@@ -34,3 +34,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "aurora_instance_class" {
+  description = "Instance class for the Aurora MySQL writer instance."
+  type        = string
+  default     = "db.t4g.large"
+}
