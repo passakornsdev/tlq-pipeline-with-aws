@@ -40,3 +40,32 @@ variable "aurora_instance_class" {
   type        = string
   default     = "db.t4g.large"
 }
+
+variable "db_port" {
+  description = "Aurora MySQL port exposed to the loader Lambda."
+  type        = number
+  default     = 3306
+}
+
+variable "db_name" {
+  description = "Aurora database name used by the loader Lambda."
+  type        = string
+  default     = "tlq"
+}
+
+variable "db_user" {
+  description = "Aurora database username used by the loader Lambda."
+  type        = string
+  default     = "admin"
+}
+
+variable "db_password" {
+  description = "Aurora database password used by the loader Lambda."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.db_password) >= 8
+    error_message = "db_password must be at least 8 characters."
+  }
+}

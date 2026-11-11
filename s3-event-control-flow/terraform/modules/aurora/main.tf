@@ -31,18 +31,18 @@ resource "aws_security_group" "aurora" {
 }
 
 resource "aws_rds_cluster" "aurora" {
-  cluster_identifier          = local.database_name
-  engine                      = "aurora-mysql"
-  database_name               = "tlq"
-  master_username             = "admin"
-  manage_master_user_password = true
-  db_subnet_group_name        = aws_db_subnet_group.aurora.name
-  vpc_security_group_ids      = [aws_security_group.aurora.id]
-  storage_encrypted           = true
-  backup_retention_period     = 7
-  skip_final_snapshot         = true
-  deletion_protection         = false
-  tags                        = var.tags
+  cluster_identifier      = local.database_name
+  engine                  = "aurora-mysql"
+  database_name           = "tlq"
+  master_username         = "admin"
+  master_password         = var.password
+  db_subnet_group_name    = aws_db_subnet_group.aurora.name
+  vpc_security_group_ids  = [aws_security_group.aurora.id]
+  storage_encrypted       = true
+  backup_retention_period = 7
+  skip_final_snapshot     = true
+  deletion_protection     = false
+  tags                    = var.tags
 }
 
 resource "aws_rds_cluster_instance" "aurora_writer" {

@@ -8,6 +8,12 @@ variable "instance_class" {
   type        = string
 }
 
+variable "password" {
+  description = "Aurora master password."
+  type        = string
+  sensitive   = true
+}
+
 variable "subnet_ids" {
   description = "Subnets for the Aurora DB subnet group."
   type        = list(string)

@@ -33,6 +33,32 @@ variable "lambda_security_group_id" {
   type        = string
 }
 
+variable "db_host" {
+  description = "Aurora endpoint for the loader Lambda."
+  type        = string
+}
+
+variable "db_port" {
+  description = "Aurora port for the loader Lambda."
+  type        = number
+}
+
+variable "db_name" {
+  description = "Aurora database name for the loader Lambda."
+  type        = string
+}
+
+variable "db_user" {
+  description = "Aurora database username for the loader Lambda."
+  type        = string
+}
+
+variable "db_password" {
+  description = "Aurora database password for the loader Lambda."
+  type        = string
+  sensitive   = true
+}
+
 variable "lambda_filename" {
   description = "Path to the Lambda deployment package."
   type        = string

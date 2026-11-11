@@ -18,12 +18,12 @@ output "processor_lambda_name" {
   value       = module.lambda.processor_lambda_name
 }
 
+output "loader_lambda_name" {
+  description = "Name of the destination JSON loader Lambda function."
+  value       = module.lambda.loader_lambda_name
+}
+
 output "aurora_endpoint" {
   description = "Aurora MySQL writer endpoint."
   value       = module.aurora.endpoint
-}
-
-output "aurora_secret_arn" {
-  description = "ARN of the Secrets Manager secret containing the Aurora master credentials."
-  value       = module.aurora.secret_arn
 }

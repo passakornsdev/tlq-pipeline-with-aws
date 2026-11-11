@@ -5,6 +5,7 @@ Terraform deploys two S3 buckets and two Java 21 Lambda functions:
 1. Uploading a `.csv` file to the source bucket invokes the dispatcher.
 2. The dispatcher counts physical data lines after the header and asynchronously invokes the processor once per 10,000 lines.
 3. Each processor converts its assigned lines to a JSON array and stores the result in the destination bucket.
+4. A loader Lambda reads each generated JSON batch and inserts its records into Aurora MySQL.
 
 ## Prerequisites
 
@@ -26,6 +27,8 @@ terraform apply
 Terraform reads `target/s3-event-control-flow-lambda.jar`, so run `mvn package` before the first apply and after changing Java source.
 Terraform appends the initial deployment date in `YYYYMMDD` format to each bucket base name.
 
+Set `db_password` in `terraform.tfvars` (or provide it interactively) to the password used by both Aurora and the loader Lambda. The loader receives `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` through its Lambda environment.
+
 ## Input and output contract
 
 Input CSV files must use a first-row header. The dispatcher uses **physical newline-delimited lines**: quoted CSV fields must not contain embedded newlines. Every data line must contain the same number of columns as the header.
@@ -37,6 +40,8 @@ converted/<source-version-or-event-sequencer>/<source-key>/batch-<index>.json
 ```
 
 The version/event-qualified prefix ensures re-uploading the same source key does not overwrite previous output. Re-delivery of the exact same S3 event writes to the same output key, making the output idempotent.
+
+The loader listens for `.json` objects under `converted/`. It creates `payments_raw` and `loaded_destination_objects` if they do not exist, stores the destination prefix as `run_id`, and skips a destination object that has already been loaded.
 
 ## Clean up
 

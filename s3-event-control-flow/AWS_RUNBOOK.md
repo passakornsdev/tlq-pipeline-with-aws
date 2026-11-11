@@ -30,9 +30,11 @@ Edit `terraform.tfvars` with your region and globally unique bucket base names:
 aws_region              = "us-west-2"
 source_bucket_name      = "my-unique-csv-source"
 destination_bucket_name = "my-unique-json-destination"
+# db_password = "replace-with-a-secure-password"
 ```
 
 Terraform appends the deployment creation date in `YYYYMMDD` format to each base name. For example, the source bucket created on November 8, 2026 is `my-unique-csv-source-20261108`. The date remains stable for the Terraform state after creation.
+The loader uses the same `db_password` for the Aurora `admin` user and its `DB_PASSWORD` Lambda environment variable. If the setting is omitted, Terraform prompts for it.
 
 `terraform.tfvars` is ignored by Git, so account-specific bucket base names are not committed.
 
@@ -108,6 +110,13 @@ aws logs tail /aws/lambda/${PROCESSOR_FUNCTION} --since 15m
 ```
 
 The dispatcher logs report the source object’s data-line and batch counts. The processor logs report each destination JSON object and its record count.
+
+The loader listens for `converted/*.json` objects and inserts each batch into Aurora. It creates the `payments_raw` and `loaded_destination_objects` tables on first load, uses the destination prefix as `run_id`, and skips duplicate notifications for an already-loaded object:
+
+```bash
+LOADER_FUNCTION=$(terraform -chdir=terraform output -raw loader_lambda_name)
+aws logs tail /aws/lambda/${LOADER_FUNCTION} --since 15m
+```
 
 ## Confirm Terraform state
 

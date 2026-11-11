@@ -1,6 +1,9 @@
 package com.passakornsdev.tlq.csv.transfer;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public class PaymentRecord {
     private static final List<String> HEADERS = List.of(
@@ -249,6 +252,77 @@ public class PaymentRecord {
         if (!HEADERS.equals(headers)) {
             throw new IllegalArgumentException("CSV header does not match the 1K_RECORDS.csv schema");
         }
+    }
+
+    public static PaymentRecord fromJsonMap(Map<String, ?> values) {
+        List<String> recordValues = new ArrayList<>(HEADERS.size());
+        for (String header : HEADERS) {
+            String propertyName = jsonPropertyName(header);
+            if (!values.containsKey(propertyName) || values.get(propertyName) == null) {
+                throw new IllegalArgumentException(
+                    "JSON property %s is required".formatted(propertyName)
+                );
+            }
+            Object value = values.get(propertyName);
+            if (!(value instanceof String)) {
+                throw new IllegalArgumentException(
+                    "JSON property %s must be a string".formatted(propertyName)
+                );
+            }
+            recordValues.add((String) value);
+        }
+        return fromValues(recordValues);
+    }
+
+    public List<String> toValues() {
+        return List.of(
+            changeType, coveredRecipientType, teachingHospitalCcn, teachingHospitalId,
+            teachingHospitalName, physicianProfileId, physicianFirstName, physicianMiddleName,
+            physicianLastName, physicianNameSuffix, recipientPrimaryBusinessStreetAddressLine1,
+            recipientPrimaryBusinessStreetAddressLine2, recipientCity, recipientState,
+            recipientZipCode, recipientCountry, recipientProvince, recipientPostalCode,
+            physicianPrimaryType, physicianSpecialty, physicianLicenseStateCode1,
+            physicianLicenseStateCode2, physicianLicenseStateCode3, physicianLicenseStateCode4,
+            physicianLicenseStateCode5, submittingApplicableManufacturerOrApplicableGpoName,
+            applicableManufacturerOrApplicableGpoMakingPaymentId,
+            applicableManufacturerOrApplicableGpoMakingPaymentName,
+            applicableManufacturerOrApplicableGpoMakingPaymentState,
+            applicableManufacturerOrApplicableGpoMakingPaymentCountry,
+            totalAmountOfPaymentUsdollars, dateOfPayment, numberOfPaymentsIncludedInTotalAmount,
+            formOfPaymentOrTransferOfValue, natureOfPaymentOrTransferOfValue, cityOfTravel,
+            stateOfTravel, countryOfTravel, physicianOwnershipIndicator,
+            thirdPartyPaymentRecipientIndicator, nameOfThirdPartyEntityReceivingPaymentOrTransferOfValue,
+            charityIndicator, thirdPartyEqualsCoveredRecipientIndicator, contextualInformation,
+            delayInPublicationIndicator, recordId, disputeStatusForPublication,
+            relatedProductIndicator, coveredOrNoncoveredIndicator1,
+            indicateDrugOrBiologicalOrDeviceOrMedicalSupply1, productCategoryOrTherapeuticArea1,
+            nameOfDrugOrBiologicalOrDeviceOrMedicalSupply1, associatedDrugOrBiologicalNdc1,
+            coveredOrNoncoveredIndicator2, indicateDrugOrBiologicalOrDeviceOrMedicalSupply2,
+            productCategoryOrTherapeuticArea2, nameOfDrugOrBiologicalOrDeviceOrMedicalSupply2,
+            associatedDrugOrBiologicalNdc2, coveredOrNoncoveredIndicator3,
+            indicateDrugOrBiologicalOrDeviceOrMedicalSupply3, productCategoryOrTherapeuticArea3,
+            nameOfDrugOrBiologicalOrDeviceOrMedicalSupply3, associatedDrugOrBiologicalNdc3,
+            coveredOrNoncoveredIndicator4, indicateDrugOrBiologicalOrDeviceOrMedicalSupply4,
+            productCategoryOrTherapeuticArea4, nameOfDrugOrBiologicalOrDeviceOrMedicalSupply4,
+            associatedDrugOrBiologicalNdc4, coveredOrNoncoveredIndicator5,
+            indicateDrugOrBiologicalOrDeviceOrMedicalSupply5, productCategoryOrTherapeuticArea5,
+            nameOfDrugOrBiologicalOrDeviceOrMedicalSupply5, associatedDrugOrBiologicalNdc5,
+            programYear, paymentPublicationDate
+        );
+    }
+
+    public static List<String> jsonPropertyNames() {
+        return HEADERS.stream().map(PaymentRecord::jsonPropertyName).toList();
+    }
+
+    private static String jsonPropertyName(String header) {
+        String[] parts = header.split("_");
+        StringBuilder propertyName = new StringBuilder(parts[0].toLowerCase(Locale.ROOT));
+        for (int index = 1; index < parts.length; index++) {
+            String part = parts[index].toLowerCase(Locale.ROOT);
+            propertyName.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+        }
+        return propertyName.toString();
     }
 
     public String getChangeType() {
