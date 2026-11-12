@@ -89,6 +89,11 @@ resource "aws_iam_role_policy" "dispatcher" {
       },
       {
         Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.db_secret_arn
+      },
+      {
+        Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:GetObjectVersion"]
         Resource = "${var.source_bucket_arn}/*"
       },
@@ -217,6 +222,10 @@ resource "aws_lambda_function" "dispatcher" {
     variables = {
       DESTINATION_BUCKET      = var.destination_bucket_name
       PROCESSOR_FUNCTION_NAME = aws_lambda_function.processor.function_name
+      DB_HOST                 = var.db_host
+      DB_PORT                 = tostring(var.db_port)
+      DB_NAME                 = var.db_name
+      DB_SECRET_ARN           = var.db_secret_arn
     }
   }
 

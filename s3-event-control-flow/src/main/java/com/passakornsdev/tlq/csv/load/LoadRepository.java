@@ -1,5 +1,6 @@
 package com.passakornsdev.tlq.csv.load;
 
+import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.transfer.PaymentRecord;
 import java.sql.Connection;
 import java.sql.PreparedStatement;

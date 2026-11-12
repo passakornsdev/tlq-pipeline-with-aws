@@ -1,4 +1,4 @@
-package com.passakornsdev.tlq.csv.load;
+package com.passakornsdev.tlq.csv.database;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,8 +10,8 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 
-record DatabaseConfig(String host, int port, String database, String username, String password) {
-    static DatabaseConfig fromEnvironment() {
+public record DatabaseConfig(String host, int port, String database, String username, String password) {
+    public static DatabaseConfig fromEnvironment() {
         String secretArn = required("DB_SECRET_ARN");
         int port = parsePort(required("DB_PORT"));
         try (SecretsManagerClient secretsManager = SecretsManagerClient.create()) {
@@ -31,7 +31,7 @@ record DatabaseConfig(String host, int port, String database, String username, S
         }
     }
 
-    Connection openConnection() throws SQLException {
+    public Connection openConnection() throws SQLException {
         String url = "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=true&serverTimezone=UTC"
             .formatted(host, port, database);
         return DriverManager.getConnection(url, username, password);

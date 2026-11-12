@@ -5,11 +5,15 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.S3Event;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Objects;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.lambda.LambdaClient;
@@ -28,6 +32,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private final ObjectMapper objectMapper;
     private final String processorFunctionName;
     private final String destinationBucket;
+    private final DatabaseConfig databaseConfig;
 
     public DispatcherHandler() {
         this(
@@ -35,7 +40,8 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
             LambdaClient.create(),
             new ObjectMapper(),
             requiredEnvironmentVariable("PROCESSOR_FUNCTION_NAME"),
-            requiredEnvironmentVariable("DESTINATION_BUCKET")
+            requiredEnvironmentVariable("DESTINATION_BUCKET"),
+            DatabaseConfig.fromEnvironment()
         );
     }
 
@@ -44,17 +50,21 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         LambdaClient lambdaClient,
         ObjectMapper objectMapper,
         String processorFunctionName,
-        String destinationBucket
+        String destinationBucket,
+        DatabaseConfig databaseConfig
     ) {
         this.s3Client = s3Client;
         this.lambdaClient = lambdaClient;
         this.objectMapper = objectMapper;
         this.processorFunctionName = processorFunctionName;
         this.destinationBucket = destinationBucket;
+        this.databaseConfig = databaseConfig;
     }
 
     @Override
     public Void handleRequest(S3Event event, Context context) {
+        dropAllTables();
+        context.getLogger().log("Dropped all tables from the configured database.%n");
         for (S3Event.S3EventNotificationRecord record : event.getRecords()) {
             String bucket = record.getS3().getBucket().getName();
             String key = URLDecoder.decode(record.getS3().getObject().getKey(), StandardCharsets.UTF_8);
@@ -71,6 +81,16 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
             );
         }
         return null;
+    }
+
+    private void dropAllTables() {
+        try (Connection connection = databaseConfig.openConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DROP TABLE IF EXISTS loaded_destination_objects");
+            statement.executeUpdate("DROP TABLE IF EXISTS payments_raw");
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to drop tables from the configured database", exception);
+        }
     }
 
     private int countDataLines(String bucket, String key, String versionId) {

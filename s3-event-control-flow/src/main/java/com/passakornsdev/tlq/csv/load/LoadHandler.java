@@ -5,6 +5,7 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.S3Event;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.transfer.PaymentRecord;
 import java.io.IOException;
 import java.net.URLDecoder;
