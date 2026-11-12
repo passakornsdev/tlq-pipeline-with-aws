@@ -154,6 +154,7 @@ The buckets are versioned, so delete all object versions and delete markers befo
 ```bash
 SOURCE_BUCKET=$(terraform -chdir=terraform output -raw source_bucket_name)
 DESTINATION_BUCKET=$(terraform -chdir=terraform output -raw destination_bucket_name)
+AWS_REGION='us-east-2'
 
 for BUCKET in "${SOURCE_BUCKET}" "${DESTINATION_BUCKET}"; do
   aws s3api list-object-versions \
