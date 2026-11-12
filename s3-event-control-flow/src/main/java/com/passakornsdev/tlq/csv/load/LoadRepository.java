@@ -43,7 +43,8 @@ final class LoadRepository {
         try (Statement statement = connection.createStatement()) {
             statement.execute("""
                 CREATE TABLE IF NOT EXISTS loaded_destination_objects (
-                    object_key VARCHAR(1024) NOT NULL PRIMARY KEY,
+                    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    object_key VARCHAR(1024) NOT NULL,
                     loaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
