@@ -23,6 +23,11 @@ variable "lambda_security_group_id" {
   type        = string
 }
 
+variable "bastion_security_group_id" {
+  description = "Security group allowed to access the RDS Proxy for administrative access."
+  type        = string
+}
+
 variable "tags" {
   description = "Tags applied to Aurora resources."
   type        = map(string)

@@ -69,6 +69,14 @@ resource "aws_security_group" "proxy" {
     security_groups = [var.lambda_security_group_id]
   }
 
+  ingress {
+    description     = "MySQL from the SSM bastion."
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [var.bastion_security_group_id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

@@ -9,3 +9,7 @@ output "public_subnet_ids" {
 output "lambda_security_group_id" {
   value = aws_security_group.lambda.id
 }
+
+output "bastion_security_group_id" {
+  value = aws_security_group.bastion.id
+}

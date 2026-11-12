@@ -58,6 +58,26 @@ Record the deployed resource names:
 terraform -chdir=terraform output
 ```
 
+## Connect to Aurora from your machine
+
+Terraform creates an SSM-managed bastion host without inbound SSH access. The bastion instance ID is available from Terraform:
+
+```bash
+AWS_REGION="us-east-2"
+BASTION_INSTANCE=$(terraform -chdir=terraform output -raw bastion_instance_id)
+PROXY_ENDPOINT=$(terraform -chdir=terraform output -raw aurora_proxy_endpoint)
+
+echo "DB password: $(aws secretsmanager get-secret-value --secret-id "$(terraform -chdir=terraform output -raw aurora_secret_arn)" --query SecretString --output text | jq -r .password)"
+
+aws ssm start-session \
+  --target "${BASTION_INSTANCE}" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"host\":[\"${PROXY_ENDPOINT}\"],\"portNumber\":[\"3306\"],\"localPortNumber\":[\"13306\"]}" \
+  --region "${AWS_REGION}"
+```
+
+Keep the session open. Configure a MySQL data source in your IDE with host `127.0.0.1`, port `13306`, database `tlq`, and the `admin` credentials stored in the Secrets Manager secret from `aurora_secret_arn`. Enable SSL/TLS.
+
 ## Exercise the full pipeline
 
 Set shell variables from Terraform outputs and upload the supplied CSV fixture:

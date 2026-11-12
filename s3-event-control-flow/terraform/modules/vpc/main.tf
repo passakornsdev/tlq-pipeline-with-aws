@@ -67,6 +67,20 @@ resource "aws_security_group" "lambda" {
   }
 }
 
+resource "aws_security_group" "bastion" {
+  name        = "${var.project_name}-bastion"
+  description = "Outbound-only access for the SSM bastion host."
+  vpc_id      = aws_vpc.app.id
+  tags        = var.tags
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 resource "aws_security_group" "vpc_endpoints" {
   name        = "${var.project_name}-vpc-endpoints"
   description = "Allow Lambda access to VPC interface endpoints."

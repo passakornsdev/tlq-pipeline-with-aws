@@ -37,3 +37,8 @@ output "aurora_secret_arn" {
   description = "ARN of the Aurora-managed Secrets Manager database credentials secret."
   value       = module.aurora.secret_arn
 }
+
+output "bastion_instance_id" {
+  description = "SSM target instance ID for RDS Proxy port forwarding."
+  value       = module.bastion.instance_id
+}
