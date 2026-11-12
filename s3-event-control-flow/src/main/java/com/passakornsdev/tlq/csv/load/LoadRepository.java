@@ -61,28 +61,6 @@ final class LoadRepository {
                     loaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """.formatted(columns));
-            ensureIndex(
-                statement,
-                "idx_payments_raw_run_state_year",
-                "run_id, recipientState, programYear"
-            );
-            ensureIndex(
-                statement,
-                "idx_payments_raw_run_year_state",
-                "run_id, programYear, recipientState"
-            );
-        }
-    }
-
-    private void ensureIndex(Statement statement, String name, String columns) throws SQLException {
-        try {
-            statement.execute(
-                "CREATE INDEX `%s` ON payments_raw (%s)".formatted(name, columns)
-            );
-        } catch (SQLException exception) {
-            if (exception.getErrorCode() != 1061) {
-                throw exception;
-            }
         }
     }
 
