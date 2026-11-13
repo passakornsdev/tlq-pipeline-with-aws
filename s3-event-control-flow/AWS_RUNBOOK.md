@@ -6,7 +6,7 @@ This guide deploys and tests the S3 CSV batch processor in `us-west-2`. Change t
 
 - Java 21 and Maven 3.9 or later
 - Terraform 1.5 or later
-- AWS CLI authenticated with a profile that can create S3, Lambda, IAM, and CloudWatch resources
+- AWS CLI authenticated with a profile that can create S3, Lambda, IAM, and CloudWatch resources or attach PowerUserAccess and IAMFullAccess Policy to it
 - Two globally unique S3 bucket names
 
 Confirm that the AWS CLI is using the intended account:
