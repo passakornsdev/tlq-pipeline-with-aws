@@ -1,6 +1,6 @@
 # S3 CSV Batch Processor
 
-Terraform deploys two S3 buckets and three Java 21 Lambda functions:
+Terraform deploys two S3 buckets and three Java 25 Lambda functions:
 
 1. Uploading a `.csv` file to the source bucket invokes the dispatcher.
 2. The dispatcher counts physical data lines after the header and asynchronously invokes the processor once per 10,000 lines.
@@ -10,7 +10,7 @@ Terraform deploys two S3 buckets and three Java 21 Lambda functions:
 
 ## Prerequisites
 
-- Java 21 and Maven 3.9+
+- Java 25 and Maven 3.9+
 - Terraform 1.5+
 - AWS credentials configured for the selected region
 - SES Identity (Both Sender and Receiver)

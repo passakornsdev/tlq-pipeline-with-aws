@@ -245,7 +245,7 @@ resource "aws_iam_role_policy_attachment" "query_vpc_access" {
 resource "aws_lambda_function" "processor" {
   function_name    = local.processor_name
   role             = aws_iam_role.processor.arn
-  runtime          = "java21"
+  runtime          = "java25"
   handler          = "com.passakornsdev.tlq.csv.transfer.ProcessorHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
@@ -268,7 +268,7 @@ resource "aws_lambda_function" "processor" {
 resource "aws_lambda_function" "dispatcher" {
   function_name    = local.dispatcher_name
   role             = aws_iam_role.dispatcher.arn
-  runtime          = "java21"
+  runtime          = "java25"
   handler          = "com.passakornsdev.tlq.csv.transfer.DispatcherHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
@@ -302,7 +302,7 @@ resource "aws_lambda_function" "dispatcher" {
 resource "aws_lambda_function" "loader" {
   function_name    = "${var.project_name}-loader"
   role             = aws_iam_role.loader.arn
-  runtime          = "java21"
+  runtime          = "java25"
   handler          = "com.passakornsdev.tlq.csv.load.LoadHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
@@ -335,7 +335,7 @@ resource "aws_lambda_function" "loader" {
 resource "aws_lambda_function" "query" {
   function_name    = local.query_name
   role             = aws_iam_role.query.arn
-  runtime          = "java21"
+  runtime          = "java25"
   handler          = "com.passakornsdev.tlq.csv.query.PaymentQueryHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
