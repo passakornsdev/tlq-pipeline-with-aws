@@ -22,6 +22,10 @@ You can just click on green double arrow button
 
 ![img.png](img.png)
 
+There is 1K records test data in the project, if you want more rows you can get it from https://faculty.washington.edu/wlloyd/courses/tcss562/project/tlq/medical_records_data/.
+
+Put the file on the source bucket and you should receive an email with a CSV file.
+
 ### SES prerequisites
 
 Before deploying the query email flow:
