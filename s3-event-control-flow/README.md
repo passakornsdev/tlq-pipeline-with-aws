@@ -13,6 +13,7 @@ Terraform deploys two S3 buckets and three Java 21 Lambda functions:
 - Java 21 and Maven 3.9+
 - Terraform 1.5+
 - AWS credentials configured for the selected region
+- SES Identity (Both Sender and Receiver)
 
 ## Deploy & Test
 Check AWS_RUNBOOK.md, Please use IntelliJ as it has a feature to render and execute code block so you won't have a hard time copying commands.
@@ -29,29 +30,3 @@ Before deploying the query email flow:
 - If the SES account is still in the sandbox, verify `SES_TO_EMAIL` too, or request production access to send to unverified recipients.
 - Confirm the query Lambda role has `ses:SendRawEmail`.
 - Confirm that the SES interface endpoint is available before sending mail. Terraform creates the `com.amazonaws.<region>.email` interface endpoint for the query Lambda.
-
-## Input and output contract
-
-Input CSV files must use a first-row header. The dispatcher uses **physical newline-delimited lines**: quoted CSV fields must not contain embedded newlines. Every data line must contain the same number of columns as the header.
-
-Each processor writes one JSON array to:
-
-```text
-converted/<source-version-or-event-sequencer>/<source-key>/batch-<index>.json
-```
-
-The version/event-qualified prefix ensures re-uploading the same source key does not overwrite previous output. Re-delivery of the exact same S3 event writes to the same output key, making the output idempotent.
-
-The loader listens for `.json` objects under `converted/`. It creates `pipeline_info`, `payments_raw`, and `loaded_destination_objects` if they do not exist, stores the destination prefix as `run_id`, and skips a destination object that has already been loaded. The dispatcher records the expected batch count in `pipeline_info`; successful new loads increment the finished count, and the final load invokes the query Lambda.
-
-## Clean up
-
-Terraform does not delete non-empty buckets. Remove the test objects first then execute destroy command:
-
-```bash
-aws s3 rm "s3://$(terraform output -raw source_bucket_name)" --recursive --region us-east-2
-aws s3 rm "s3://$(terraform output -raw destination_bucket_name)" --recursive --region us-east-2
-  
-cd terraform
-terraform destroy
-```
