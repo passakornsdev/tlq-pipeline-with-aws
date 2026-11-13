@@ -14,21 +14,12 @@ Terraform deploys two S3 buckets and three Java 21 Lambda functions:
 - Terraform 1.5+
 - AWS credentials configured for the selected region
 
-## Deploy
+## Deploy & Test
+Check AWS_RUNBOOK.md, Please use IntelliJ as it has a feature to render and execute code block so you won't have a hard time copying commands.
 
-```bash
-mvn package
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with globally unique bucket base names.
-terraform init
-terraform apply
-```
+You can just click on green double arrow button
 
-Terraform reads `target/s3-event-control-flow-lambda.jar`, so run `mvn package` before the first apply and after changing Java source.
-Terraform appends the initial deployment date in `YYYYMMDD` format to each bucket base name.
-
-Aurora manages its master password in Secrets Manager. The loader and query Lambdas receive the RDS Proxy endpoint and managed secret ARN through `DB_HOST` and `DB_SECRET_ARN`; they read the database username and password from Secrets Manager at runtime. The query Lambda sends its CSV attachment using the verified `SES_FROM_EMAIL` and `SES_TO_EMAIL` addresses.
+![img.png](img.png)
 
 ### SES prerequisites
 
