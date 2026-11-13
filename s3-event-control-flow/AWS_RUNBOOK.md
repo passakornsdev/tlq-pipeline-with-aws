@@ -30,12 +30,25 @@ Edit `terraform.tfvars` with your region and globally unique bucket base names:
 aws_region              = "us-west-2"
 source_bucket_name      = "my-unique-csv-source"
 destination_bucket_name = "my-unique-json-destination"
+ses_from_email          = "verified-sender@example.com"
+ses_to_email            = "recipient@example.com"
 ```
 
 Terraform appends the deployment creation date in `YYYYMMDD` format to each base name. For example, the source bucket created on November 8, 2026 is `my-unique-csv-source-20261108`. The date remains stable for the Terraform state after creation.
 The loader connects through the Aurora RDS Proxy. Aurora manages the `admin` password in Secrets Manager, and the loader reads that secret at runtime using its `DB_SECRET_ARN` environment variable.
 
 `terraform.tfvars` is ignored by Git, so account-specific bucket base names are not committed.
+
+## Verify SES before deployment
+
+The query Lambda emails the aggregate CSV report through Amazon SES. Complete these checks in the same Region configured by `aws_region`:
+
+1. Verify the `ses_from_email` address or its domain in SES.
+2. If the SES account is in the sandbox, verify `ses_to_email` as well. Request production access if the recipient does not use a verified identity.
+3. Confirm the query Lambda execution role can call `ses:SendRawEmail`.
+4. Confirm the SES API interface endpoint is available. Terraform creates `com.amazonaws.<region>.email` with private DNS and allows HTTPS from the Lambda security group.
+
+SES identity verification and sandbox status are Region-specific. The sender and recipient values are passed to the query Lambda as `SES_FROM_EMAIL` and `SES_TO_EMAIL`.
 
 
 Build the Lambda and deploy AWS Infrastructure

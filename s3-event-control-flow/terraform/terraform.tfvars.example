@@ -1,6 +1,8 @@
 aws_region              = "us-east-2"
 source_bucket_name      = "tcss-562-csv-source"
 destination_bucket_name = "tcss-562-json-destination"
+ses_from_email          = "verified-sender@example.com"
+ses_to_email            = "recipient@example.com"
 
 tags = {
   Environment = "development"

@@ -6,6 +6,7 @@ import com.amazonaws.services.lambda.runtime.events.S3Event;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
+import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -24,6 +25,8 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.core.ResponseInputStream;
 
+import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironmentVariable;
+
 public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private static final int BATCH_SIZE = 10_000;
 
@@ -33,6 +36,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private final String processorFunctionName;
     private final String destinationBucket;
     private final DatabaseConfig databaseConfig;
+    private final PipelineInfoRepository pipelineInfoRepository;
 
     public DispatcherHandler() {
         this(
@@ -59,6 +63,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         this.processorFunctionName = processorFunctionName;
         this.destinationBucket = destinationBucket;
         this.databaseConfig = databaseConfig;
+        this.pipelineInfoRepository = new PipelineInfoRepository(databaseConfig);
     }
 
     @Override
@@ -74,10 +79,12 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                 : versionId;
 
             int dataLineCount = countDataLines(bucket, key, versionId);
-            int batchCount = dispatchBatches(bucket, key, versionId, objectIdentity, dataLineCount);
+            int batchCount = batchCount(dataLineCount);
+            pipelineInfoRepository.createPipeline(batchCount);
+            int dispatchedCount = dispatchBatches(bucket, key, versionId, objectIdentity, dataLineCount);
             context.getLogger().log(
                 "Dispatched %d batches for s3://%s/%s containing %d data lines.%n"
-                    .formatted(batchCount, bucket, key, dataLineCount)
+                    .formatted(dispatchedCount, bucket, key, dataLineCount)
             );
         }
         return null;
@@ -86,6 +93,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private void dropAllTables() {
         try (Connection connection = databaseConfig.openConnection();
              Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DROP TABLE IF EXISTS pipeline_info");
             statement.executeUpdate("DROP TABLE IF EXISTS loaded_destination_objects");
             statement.executeUpdate("DROP TABLE IF EXISTS payments_raw");
         } catch (SQLException exception) {
@@ -148,6 +156,10 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         return batchIndex;
     }
 
+    private int batchCount(int dataLineCount) {
+        return dataLineCount / BATCH_SIZE + (dataLineCount % BATCH_SIZE == 0 ? 0 : 1);
+    }
+
     private String serialize(ProcessingRequest request) {
         try {
             return objectMapper.writeValueAsString(request);
@@ -156,11 +168,4 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         }
     }
 
-    private static String requiredEnvironmentVariable(String name) {
-        String value = System.getenv(name);
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing required environment variable: " + name);
-        }
-        return value;
-    }
 }

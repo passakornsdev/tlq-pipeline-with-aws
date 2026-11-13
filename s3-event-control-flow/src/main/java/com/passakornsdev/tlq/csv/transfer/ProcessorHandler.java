@@ -24,10 +24,6 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
         this(S3Client.create(), new ObjectMapper(), new CsvRecordExtractor());
     }
 
-    ProcessorHandler(S3Client s3Client, ObjectMapper objectMapper) {
-        this(s3Client, objectMapper, new CsvRecordExtractor());
-    }
-
     ProcessorHandler(
         S3Client s3Client,
         ObjectMapper objectMapper,

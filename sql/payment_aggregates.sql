@@ -1,5 +1,11 @@
 -- Schema used by the loader and payment aggregate query Lambda.
 
+CREATE TABLE IF NOT EXISTS pipeline_info (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    total_invocations BIGINT NOT NULL,
+    finished_invocations BIGINT NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS loaded_destination_objects (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     object_key VARCHAR(1024) NOT NULL,

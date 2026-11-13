@@ -23,6 +23,11 @@ output "loader_lambda_name" {
   value       = module.lambda.loader_lambda_name
 }
 
+output "query_lambda_name" {
+  description = "Name of the payment aggregate query Lambda function."
+  value       = module.lambda.query_lambda_name
+}
+
 output "aurora_endpoint" {
   description = "Aurora MySQL writer endpoint."
   value       = module.aurora.endpoint

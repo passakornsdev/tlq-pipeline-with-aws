@@ -53,6 +53,16 @@ variable "db_secret_arn" {
   type        = string
 }
 
+variable "ses_from_email" {
+  description = "Verified SES sender email address."
+  type        = string
+}
+
+variable "ses_to_email" {
+  description = "SES recipient email address."
+  type        = string
+}
+
 variable "lambda_filename" {
   description = "Path to the Lambda deployment package."
   type        = string

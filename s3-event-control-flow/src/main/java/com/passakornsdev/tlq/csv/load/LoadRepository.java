@@ -1,6 +1,7 @@
 package com.passakornsdev.tlq.csv.load;
 
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
+import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
 import com.passakornsdev.tlq.csv.transfer.PaymentRecord;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -41,6 +42,7 @@ final class LoadRepository {
     }
 
     private void ensureSchema(Connection connection) throws SQLException {
+        new PipelineInfoRepository(databaseConfig).ensureSchema(connection);
         try (Statement statement = connection.createStatement()) {
             statement.execute("""
                 CREATE TABLE IF NOT EXISTS loaded_destination_objects (

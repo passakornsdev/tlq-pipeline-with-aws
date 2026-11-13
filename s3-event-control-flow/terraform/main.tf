@@ -49,6 +49,8 @@ module "lambda" {
   db_port                  = var.db_port
   db_name                  = var.db_name
   db_secret_arn            = module.aurora.secret_arn
+  ses_from_email           = var.ses_from_email
+  ses_to_email             = var.ses_to_email
   lambda_filename          = "${path.root}/../target/s3-event-control-flow-lambda.jar"
   tags                     = local.common_tags
 }
