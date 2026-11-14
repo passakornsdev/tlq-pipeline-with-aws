@@ -1,0 +1,8 @@
+aws_region              = "us-east-2"
+source_bucket_name      = "tcss-562-s3-sqs-csv-source"
+ses_from_email          = "verified-sender@example.com"
+ses_to_email            = "recipient@example.com"
+
+tags = {
+  Environment = "development"
+}

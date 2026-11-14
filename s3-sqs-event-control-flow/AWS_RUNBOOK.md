@@ -1,0 +1,180 @@
+# AWS Deployment and Test Runbook
+
+This guide deploys and tests the S3/SQS CSV batch processor in `us-west-2`. Change the region consistently if you use another AWS region.
+
+## Prerequisites
+
+- Java 25 and Maven 3.9 or later
+- Terraform 1.5 or later
+- AWS CLI authenticated with a profile that can create S3, Lambda, IAM, and CloudWatch resources or attach PowerUserAccess and IAMFullAccess Policy to it
+- One globally unique S3 bucket name
+
+Confirm that the AWS CLI is using the intended account:
+
+```bash
+aws sts get-caller-identity --profile default --region us-west-2
+```
+
+## Configure Terraform
+
+Create a local Terraform variables file from the checked-in example:
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` with your region and globally unique source bucket base name:
+
+```hcl
+aws_region              = "us-west-2"
+source_bucket_name      = "my-unique-csv-source"
+ses_from_email          = "verified-sender@example.com"
+ses_to_email            = "recipient@example.com"
+```
+
+Terraform appends the deployment creation date in `YYYYMMDD` format to the source bucket base name. The SQS queue uses the project name and the dead-letter queue uses the `-dlq` suffix.
+The loader connects through the Aurora RDS Proxy. Aurora manages the `admin` password in Secrets Manager, and the loader reads that secret at runtime using its `DB_SECRET_ARN` environment variable.
+
+`terraform.tfvars` is ignored by Git, so account-specific bucket base names are not committed.
+
+## Verify SES before deployment
+
+The query Lambda emails the aggregate CSV report through Amazon SES. Complete these checks in the same Region configured by `aws_region`:
+
+1. Verify the `ses_from_email` address or its domain in SES.
+2. If the SES account is in the sandbox, verify `ses_to_email` as well. Request production access if the recipient does not use a verified identity.
+3. Confirm the query Lambda execution role can call `ses:SendRawEmail`.
+4. Confirm the SES API interface endpoint is available. Terraform creates `com.amazonaws.<region>.email` with private DNS and allows HTTPS from the Lambda security group.
+
+SES identity verification and sandbox status are Region-specific. The sender and recipient values are passed to the query Lambda as `SES_FROM_EMAIL` and `SES_TO_EMAIL`.
+
+
+Build the Lambda and deploy AWS Infrastructure
+
+```bash
+mvn package
+
+terraform -chdir=terraform init
+terraform -chdir=terraform fmt -check
+terraform -chdir=terraform validate
+
+terraform -chdir=terraform plan -out=tfplan -input=false
+
+terraform -chdir=terraform apply -input=false tfplan
+```
+
+Record the deployed resource names:
+
+```bash
+terraform -chdir=terraform output
+```
+
+## Connect to Aurora from your machine
+
+Terraform creates an SSM-managed bastion host without inbound SSH access. The bastion instance ID is available from Terraform:
+
+```bash
+AWS_REGION="us-east-2"
+BASTION_INSTANCE=$(terraform -chdir=terraform output -raw bastion_instance_id)
+PROXY_ENDPOINT=$(terraform -chdir=terraform output -raw aurora_proxy_endpoint)
+
+echo "DB password: $(aws secretsmanager get-secret-value --secret-id "$(terraform -chdir=terraform output -raw aurora_secret_arn)" --query SecretString --output text | jq -r .password)"
+
+aws ssm start-session \
+  --target "${BASTION_INSTANCE}" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"host\":[\"${PROXY_ENDPOINT}\"],\"portNumber\":[\"3306\"],\"localPortNumber\":[\"13306\"]}" \
+  --region "${AWS_REGION}"
+```
+
+Keep the session open. Configure a MySQL data source in your IDE with host `127.0.0.1`, port `13306`, database `tlq`, and the `admin` credentials stored in the Secrets Manager secret from `aurora_secret_arn`. Enable SSL/TLS.
+
+## Exercise the full pipeline
+
+Set shell variables from Terraform outputs and upload the supplied CSV fixture:
+
+```bash
+AWS_REGION="us-west-2"
+SOURCE_BUCKET=$(terraform -chdir=terraform output -raw source_bucket_name)
+
+aws s3 cp 1K_RECORDS.csv \
+  "s3://${SOURCE_BUCKET}/1K_RECORDS.csv" \
+  --region "${AWS_REGION}"
+```
+
+The source bucket event invokes the dispatcher. It counts data lines after the header and invokes the processor asynchronously for each group of at most 500 lines. Each processor sends one SQS message containing the CSV header and a two-dimensional array of row values.
+
+The loader event source mapping is configured with `batch_size = 1`, so each SQS message independently invokes the loader. Failed messages are retried and then moved to the SQS dead-letter queue after three receives.
+
+Each message has this shape:
+
+```json
+{
+  "header": ["Change_Type", "..."],
+  "rows": [["NEW", "..."], ["NEW", "..."]]
+}
+```
+
+## Inspect Lambda logs
+
+Get the names of the deployed functions:
+
+```bash
+DISPATCHER_FUNCTION=$(terraform -chdir=terraform output -raw dispatcher_lambda_name)
+PROCESSOR_FUNCTION=$(terraform -chdir=terraform output -raw processor_lambda_name)
+
+aws logs tail /aws/lambda/${DISPATCHER_FUNCTION} --since 15m
+aws logs tail /aws/lambda/${PROCESSOR_FUNCTION} --since 15m
+```
+
+The dispatcher logs report the source object’s data-line and batch counts. The processor logs report each SQS message and its record count.
+
+The loader consumes SQS messages and inserts each batch into Aurora. It creates the `payments_raw` and `loaded_sqs_messages` tables on first load, uses the source object identity as `run_id`, and skips duplicate deliveries for an already-loaded message:
+
+```bash
+LOADER_FUNCTION=$(terraform -chdir=terraform output -raw loader_lambda_name)
+aws logs tail /aws/lambda/${LOADER_FUNCTION} --since 15m
+```
+
+## Confirm Terraform state
+
+After testing, verify the deployed AWS resources match the local configuration:
+
+```bash
+terraform -chdir=terraform plan -detailed-exitcode -input=false
+```
+
+An exit code of `0` and `No changes` means there is no drift.
+
+## Clean up
+
+The source bucket is versioned, so delete all object versions and delete markers before destroying the infrastructure:
+
+```bash
+SOURCE_BUCKET=$(terraform -chdir=terraform output -raw source_bucket_name)
+AWS_REGION='us-east-2'
+
+aws s3api list-object-versions \
+  --bucket "${SOURCE_BUCKET}" \
+  --query '{Objects: [Versions[].{Key: Key, VersionId: VersionId}, DeleteMarkers[].{Key: Key, VersionId: VersionId}][]}' \
+  --output json \
+  --region "${AWS_REGION}" > "/tmp/${SOURCE_BUCKET}-objects.json"
+
+if [ "$(jq '.Objects | length' "/tmp/${SOURCE_BUCKET}-objects.json")" -gt 0 ]; then
+  aws s3api delete-objects \
+    --bucket "${SOURCE_BUCKET}" \
+    --delete "file:///tmp/${SOURCE_BUCKET}-objects.json" \
+    --region "${AWS_REGION}"
+fi
+
+rm "/tmp/${SOURCE_BUCKET}-objects.json"
+```
+
+The cleanup command requires `jq`, which is available by default on current macOS systems. For buckets with more than 1,000 versions or delete markers, repeat the command until the bucket is empty. SQS messages are removed when the queues are destroyed.
+
+Then destroy the deployed infrastructure:
+
+```bash
+terraform -chdir=terraform destroy
+```
