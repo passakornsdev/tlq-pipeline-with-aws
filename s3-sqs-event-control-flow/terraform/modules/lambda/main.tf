@@ -251,7 +251,7 @@ resource "aws_lambda_function" "processor" {
   function_name    = local.processor_name
   role             = aws_iam_role.processor.arn
   runtime          = "java25"
-  handler          = "com.passakornsdev.tlq.csv.transfer.ProcessorHandler::handleRequest"
+  handler          = "com.passakornsdev.tlq.csv.transform.ProcessorHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
   memory_size      = 1024
@@ -280,7 +280,7 @@ resource "aws_lambda_function" "dispatcher" {
   function_name    = local.dispatcher_name
   role             = aws_iam_role.dispatcher.arn
   runtime          = "java25"
-  handler          = "com.passakornsdev.tlq.csv.transfer.DispatcherHandler::handleRequest"
+  handler          = "com.passakornsdev.tlq.csv.transform.DispatcherHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
   memory_size      = 1024

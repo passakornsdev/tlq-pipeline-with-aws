@@ -38,6 +38,8 @@ The loader connects through RDS Proxy to a single-AZ MySQL RDS instance. RDS man
 
 This configuration replaces the previous Aurora database with RDS MySQL and does not migrate existing database data. Back up or migrate any data before applying it to an existing deployment.
 
+The VPC has no Internet Gateway or NAT gateway. AWS service access uses VPC endpoints, including Systems Manager endpoints for the private bastion; the bastion has no public IP.
+
 `terraform.tfvars` is ignored by Git, so account-specific bucket base names are not committed.
 
 ## Verify SES before deployment
