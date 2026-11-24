@@ -2,7 +2,15 @@ output "vpc_id" {
   value = aws_vpc.app.id
 }
 
-output "public_subnet_ids" {
+output "primary_subnet_id" {
+  value = aws_subnet.public[0].id
+}
+
+output "primary_availability_zone" {
+  value = aws_subnet.public[0].availability_zone
+}
+
+output "database_subnet_ids" {
   value = aws_subnet.public[*].id
 }
 

@@ -34,7 +34,9 @@ ses_to_email            = "recipient@example.com"
 ```
 
 Terraform appends the deployment creation date in `YYYYMMDD` format to the source bucket base name. The SQS queue uses the project name and the dead-letter queue uses the `-dlq` suffix.
-The loader connects through the Aurora RDS Proxy. Aurora manages the `admin` password in Secrets Manager, and the loader reads that secret at runtime using its `DB_SECRET_ARN` environment variable.
+The loader connects through RDS Proxy to a single-AZ MySQL RDS instance. RDS manages the `admin` password in Secrets Manager, and the loader reads that secret at runtime using its `DB_SECRET_ARN` environment variable. The database runs in one AZ; the DB subnet group and RDS Proxy span two AZs as AWS requires.
+
+This configuration replaces the previous Aurora database with RDS MySQL and does not migrate existing database data. Back up or migrate any data before applying it to an existing deployment.
 
 `terraform.tfvars` is ignored by Git, so account-specific bucket base names are not committed.
 
@@ -70,16 +72,16 @@ Record the deployed resource names:
 terraform -chdir=terraform output
 ```
 
-## Connect to Aurora from your machine
+## Connect to MySQL through RDS Proxy from your machine
 
 Terraform creates an SSM-managed bastion host without inbound SSH access. The bastion instance ID is available from Terraform:
 
 ```bash
 AWS_REGION="us-east-2"
 BASTION_INSTANCE=$(terraform -chdir=terraform output -raw bastion_instance_id)
-PROXY_ENDPOINT=$(terraform -chdir=terraform output -raw aurora_proxy_endpoint)
+PROXY_ENDPOINT=$(terraform -chdir=terraform output -raw database_proxy_endpoint)
 
-echo "DB password: $(aws secretsmanager get-secret-value --secret-id "$(terraform -chdir=terraform output -raw aurora_secret_arn)" --query SecretString --output text | jq -r .password)"
+echo "DB password: $(aws secretsmanager get-secret-value --secret-id "$(terraform -chdir=terraform output -raw database_secret_arn)" --query SecretString --output text | jq -r .password)"
 
 aws ssm start-session \
   --target "${BASTION_INSTANCE}" \
@@ -88,7 +90,7 @@ aws ssm start-session \
   --region "${AWS_REGION}"
 ```
 
-Keep the session open. Configure a MySQL data source in your IDE with host `127.0.0.1`, port `13306`, database `tlq`, and the `admin` credentials stored in the Secrets Manager secret from `aurora_secret_arn`. Enable SSL/TLS.
+Keep the session open. Configure a MySQL data source in your IDE with host `127.0.0.1`, port `13306`, database `tlq`, and the `admin` credentials stored in the Secrets Manager secret from `database_secret_arn`. Enable SSL/TLS.
 
 ## Exercise the full pipeline
 
@@ -130,7 +132,7 @@ aws logs tail /aws/lambda/${PROCESSOR_FUNCTION} --since 15m
 
 The dispatcher logs report the source object’s data-line and batch counts. The processor logs report each SQS message and its record count.
 
-The loader consumes SQS messages and inserts each batch into Aurora. It creates the `payments_raw` and `loaded_sqs_messages` tables on first load, uses the source object identity as `run_id`, and skips duplicate deliveries for an already-loaded message:
+The loader consumes SQS messages and inserts each batch into MySQL. It creates the `payments_raw` and `loaded_sqs_messages` tables on first load, uses the source object identity as `run_id`, and skips duplicate deliveries for an already-loaded message:
 
 ```bash
 LOADER_FUNCTION=$(terraform -chdir=terraform output -raw loader_lambda_name)
