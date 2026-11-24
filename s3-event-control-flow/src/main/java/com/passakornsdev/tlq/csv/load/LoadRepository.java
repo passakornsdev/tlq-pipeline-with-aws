@@ -2,7 +2,7 @@ package com.passakornsdev.tlq.csv.load;
 
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
-import com.passakornsdev.tlq.csv.transfer.PaymentRecord;
+import com.passakornsdev.tlq.csv.transform.PaymentRecord;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
