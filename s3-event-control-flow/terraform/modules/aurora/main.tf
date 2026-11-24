@@ -50,6 +50,7 @@ resource "aws_rds_cluster_instance" "aurora_writer" {
   cluster_identifier   = aws_rds_cluster.aurora.id
   instance_class       = var.instance_class
   engine               = aws_rds_cluster.aurora.engine
+  availability_zone    = var.availability_zone
   db_subnet_group_name = aws_db_subnet_group.aurora.name
   publicly_accessible  = false
   tags                 = var.tags

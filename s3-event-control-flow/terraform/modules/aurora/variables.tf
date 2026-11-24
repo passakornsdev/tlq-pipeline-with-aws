@@ -8,6 +8,11 @@ variable "instance_class" {
   type        = string
 }
 
+variable "availability_zone" {
+  description = "Availability zone for the Aurora writer instance."
+  type        = string
+}
+
 variable "subnet_ids" {
   description = "Subnets for the Aurora DB subnet group."
   type        = list(string)

@@ -56,7 +56,7 @@ Build the Lambda and deploy AWS Infrastructure
 ```bash
 mvn package
 
-terraform -chdir=terraform init
+terraform -chdir=terraform init -upgrade
 terraform -chdir=terraform fmt -check
 terraform -chdir=terraform validate
 

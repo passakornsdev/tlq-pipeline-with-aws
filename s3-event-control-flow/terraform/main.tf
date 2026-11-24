@@ -30,7 +30,7 @@ module "bastion" {
 
   project_name      = var.project_name
   vpc_id            = module.vpc.vpc_id
-  subnet_id         = module.vpc.public_subnet_ids[0]
+  subnet_id         = module.vpc.primary_subnet_id
   security_group_id = module.vpc.bastion_security_group_id
   tags              = local.common_tags
 }
@@ -43,7 +43,7 @@ module "lambda" {
   source_bucket_arn        = module.s3.source_bucket_arn
   destination_bucket_name  = module.s3.destination_bucket_name
   destination_bucket_arn   = module.s3.destination_bucket_arn
-  subnet_ids               = module.vpc.public_subnet_ids
+  subnet_ids               = [module.vpc.primary_subnet_id]
   lambda_security_group_id = module.vpc.lambda_security_group_id
   db_host                  = module.aurora.proxy_endpoint
   db_port                  = var.db_port
@@ -60,7 +60,8 @@ module "aurora" {
 
   project_name              = var.project_name
   instance_class            = var.aurora_instance_class
-  subnet_ids                = module.vpc.public_subnet_ids
+  availability_zone         = module.vpc.primary_availability_zone
+  subnet_ids                = module.vpc.database_subnet_ids
   vpc_id                    = module.vpc.vpc_id
   lambda_security_group_id  = module.vpc.lambda_security_group_id
   bastion_security_group_id = module.vpc.bastion_security_group_id
