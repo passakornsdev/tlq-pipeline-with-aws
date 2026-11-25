@@ -4,7 +4,7 @@ Terraform deploys two S3 buckets and three Java 25 Lambda functions:
 
 1. Uploading a `.csv` file to the source bucket invokes the dispatcher.
 2. The dispatcher counts physical data lines after the header and asynchronously invokes the processor once per 10,000 lines.
-3. Each processor converts its assigned lines to a JSON array and stores the result in the destination bucket.
+3. Each processor stores its assigned rows as a JSON object with validated CSV `headers` and `content` rows (arrays aligned to those headers; the CSV header is not repeated in `content`).
 4. A loader Lambda reads each generated JSON batch and inserts its records into Aurora MySQL.
 5. After the final successful load, the query Lambda emails an aggregate CSV report through SES.
 

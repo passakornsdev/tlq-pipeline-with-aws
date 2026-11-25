@@ -9,7 +9,7 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 
 public class CsvRecordExtractor {
-    public List<PaymentRecord> extractRecords(
+    public BatchPayload extractRecords(
         BufferedReader reader,
         int startLine,
         Integer endExclusiveLine
@@ -19,10 +19,11 @@ public class CsvRecordExtractor {
             throw new IllegalArgumentException("Source object has no CSV header");
         }
 
-        PaymentRecord.validateHeaders(parseSingleRecord(header, "header"));
+        List<String> headers = parseSingleRecord(header, "header");
+        PaymentRecordSchema.validateHeaders(headers);
 
         int initialCapacity = endExclusiveLine == null ? 10 : endExclusiveLine - startLine;
-        List<PaymentRecord> records = new ArrayList<>(initialCapacity);
+        List<List<String>> content = new ArrayList<>(initialCapacity);
         int lineNumber = 0;
         String line;
         while ((line = reader.readLine()) != null) {
@@ -30,7 +31,9 @@ public class CsvRecordExtractor {
                 break;
             }
             if (lineNumber >= startLine) {
-                records.add(PaymentRecord.fromValues(parseSingleRecord(line, "data line " + lineNumber)));
+                List<String> values = parseSingleRecord(line, "data line " + lineNumber);
+                PaymentRecordSchema.validateRow(values);
+                content.add(values);
             }
             lineNumber++;
         }
@@ -38,7 +41,7 @@ public class CsvRecordExtractor {
         if (endExclusiveLine != null && lineNumber < endExclusiveLine) {
             throw new IllegalArgumentException("Source object ended before the assigned line range");
         }
-        return records;
+        return new BatchPayload(headers, content);
     }
 
     private List<String> parseSingleRecord(String line, String description) {

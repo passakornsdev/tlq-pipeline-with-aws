@@ -2,7 +2,7 @@ package com.passakornsdev.tlq.csv.load;
 
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
-import com.passakornsdev.tlq.csv.transform.PaymentRecord;
+import com.passakornsdev.tlq.csv.transform.PaymentRecordSchema;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 final class LoadRepository {
-    private static final List<String> COLUMNS = PaymentRecord.jsonPropertyNames();
+    private static final List<String> COLUMNS = PaymentRecordSchema.databaseColumnNames();
 
     private final DatabaseConfig databaseConfig;
 
@@ -20,7 +20,7 @@ final class LoadRepository {
         this.databaseConfig = databaseConfig;
     }
 
-    boolean loadIfNew(String objectKey, String runId, List<PaymentRecord> records) {
+    boolean loadIfNew(String objectKey, String runId, List<List<String>> records) {
         try (Connection connection = databaseConfig.openConnection()) {
             ensureSchema(connection);
             connection.setAutoCommit(false);
@@ -89,7 +89,7 @@ final class LoadRepository {
         Connection connection,
         String objectKey,
         String runId,
-        List<PaymentRecord> records
+        List<List<String>> records
     ) throws SQLException {
         String columns = COLUMNS.stream().map(column -> "`%s`".formatted(column))
             .collect(Collectors.joining(", "));
@@ -100,10 +100,9 @@ final class LoadRepository {
             .formatted(columns, placeholders);
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (PaymentRecord record : records) {
+            for (List<String> values : records) {
                 statement.setString(1, runId);
                 statement.setString(2, objectKey);
-                List<String> values = record.toValues();
                 for (int index = 0; index < values.size(); index++) {
                     statement.setString(index + 3, values.get(index));
                 }

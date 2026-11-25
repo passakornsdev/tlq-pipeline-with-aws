@@ -8,7 +8,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -40,11 +39,11 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
         Inspector inspector = new Inspector();
         inspector.inspectAll();
 
-        List<PaymentRecord> records = readBatch(request);
+        BatchPayload batch = readBatch(request);
         String outputKey = outputKey(request);
 
         try {
-            byte[] body = objectMapper.writeValueAsBytes(records);
+            byte[] body = objectMapper.writeValueAsBytes(batch);
             s3Client.putObject(
                 PutObjectRequest.builder()
                     .bucket(request.destinationBucket())
@@ -59,7 +58,7 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
 
         context.getLogger().log(
             "Wrote %d records from s3://%s/%s to s3://%s/%s%n"
-                .formatted(records.size(), request.sourceBucket(), request.sourceKey(),
+                .formatted(batch.content().size(), request.sourceBucket(), request.sourceKey(),
                     request.destinationBucket(), outputKey)
         );
         inspector.inspectAllDeltas();
@@ -67,7 +66,7 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
         return null;
     }
 
-    private List<PaymentRecord> readBatch(ProcessingRequest request) {
+    private BatchPayload readBatch(ProcessingRequest request) {
         GetObjectRequest.Builder requestBuilder = GetObjectRequest.builder()
             .bucket(request.sourceBucket())
             .key(request.sourceKey());

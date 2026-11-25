@@ -3,17 +3,17 @@ package com.passakornsdev.tlq.csv.load;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.S3Event;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
 import com.passakornsdev.tlq.csv.saaf.Inspector;
-import com.passakornsdev.tlq.csv.transform.PaymentRecord;
+import com.passakornsdev.tlq.csv.transform.BatchPayload;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.lambda.LambdaClient;
@@ -88,8 +88,8 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
                 StandardCharsets.UTF_8
             );
             String runId = LoadObjectKey.runId(objectKey);
-            List<PaymentRecord> records = readRecords(bucket, objectKey, record.getS3().getObject().getVersionId());
-            boolean loaded = repository.loadIfNew(objectKey, runId, records);
+            List<List<String>> content = readRecords(bucket, objectKey, record.getS3().getObject().getVersionId());
+            boolean loaded = repository.loadIfNew(objectKey, runId, content);
             boolean queryTriggered = loaded && pipelineInfoRepository.markLatestFinishedAndShouldQuery();
             if (queryTriggered) {
                 invokeQuery();
@@ -98,7 +98,7 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
                 "%s %d records from s3://%s/%s with run_id=%s%s%n"
                     .formatted(
                         loaded ? "Loaded" : "Skipped duplicate",
-                        records.size(),
+                        content.size(),
                         bucket,
                         objectKey,
                         runId,
@@ -111,7 +111,7 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
         return null;
     }
 
-    private List<PaymentRecord> readRecords(String bucket, String objectKey, String versionId) {
+    private List<List<String>> readRecords(String bucket, String objectKey, String versionId) {
         GetObjectRequest.Builder request = GetObjectRequest.builder()
             .bucket(bucket)
             .key(objectKey);
@@ -120,14 +120,44 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
         }
 
         try (ResponseInputStream<GetObjectResponse> input = s3Client.getObject(request.build())) {
-            List<Map<String, Object>> values = objectMapper.readValue(input, new TypeReference<>() {});
-            return values.stream().map(PaymentRecord::fromJsonMap).toList();
+            JsonNode payload = objectMapper.readTree(input);
+            if (payload == null || !payload.isObject()) {
+                throw new IllegalArgumentException("Destination JSON must be an object");
+            }
+            List<String> headers = readStringArray(payload.get("headers"), "headers");
+            JsonNode contentNode = payload.get("content");
+            if (contentNode == null || !contentNode.isArray()) {
+                throw new IllegalArgumentException("JSON content must be an array of data rows");
+            }
+            List<List<String>> content = new ArrayList<>(contentNode.size());
+            for (int index = 0; index < contentNode.size(); index++) {
+                content.add(readStringArray(contentNode.get(index), "content row %d".formatted(index)));
+            }
+            BatchPayload batch = new BatchPayload(headers, content);
+            return batch.validatedContent();
         } catch (IOException exception) {
             throw new IllegalStateException(
                 "Unable to read destination object s3://%s/%s".formatted(bucket, objectKey),
                 exception
             );
         }
+    }
+
+    private List<String> readStringArray(JsonNode node, String description) {
+        if (node == null || !node.isArray()) {
+            throw new IllegalArgumentException("JSON %s must be an array".formatted(description));
+        }
+        List<String> values = new ArrayList<>(node.size());
+        for (int index = 0; index < node.size(); index++) {
+            JsonNode value = node.get(index);
+            if (!value.isTextual()) {
+                throw new IllegalArgumentException(
+                    "JSON %s value %d must be a string".formatted(description, index)
+                );
+            }
+            values.add(value.textValue());
+        }
+        return values;
     }
 
     private void invokeQuery() {

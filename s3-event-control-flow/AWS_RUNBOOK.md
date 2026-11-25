@@ -115,18 +115,15 @@ aws s3 ls "s3://${DESTINATION_BUCKET}/converted/" \
   --region "${AWS_REGION}"
 ```
 
-Each output is a JSON array with camelCase properties derived from the `SAMPLE.csv` header:
+Each output is a JSON object. `headers` contains the validated CSV column names, and each array in `content` contains one data row in that column order; the CSV header row is not included in `content`. This abbreviated example shows three columns:
 
 ```json
-[
-  {
-    "changeType": "NEW",
-    "physicianProfileId": "59308",
-    "physicianFirstName": "Seth",
-    "physicianLastName": "Berk",
-    "totalAmountInvestedUsDollars": "9000.00"
-  }
-]
+{
+  "headers": ["Change_Type", "Covered_Recipient_Type", "Teaching_Hospital_CCN"],
+  "content": [
+    ["...", "...", "..."]
+  ]
+}
 ```
 
 ## Inspect Lambda logs
