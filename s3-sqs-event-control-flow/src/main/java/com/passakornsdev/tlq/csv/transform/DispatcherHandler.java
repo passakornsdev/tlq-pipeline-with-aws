@@ -16,6 +16,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import com.passakornsdev.tlq.csv.saaf.Inspector;
 import software.amazon.awssdk.core.SdkBytes;
@@ -31,6 +32,8 @@ import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironment
 
 public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private static final int BATCH_SIZE = 500;
+    private static final int INVOCATIONS_PER_INTERVAL = 75;
+    private static final long INVOCATION_INTERVAL_MILLIS = 2_000L;
 
     private final S3Client s3Client;
     private final LambdaClient lambdaClient;
@@ -70,6 +73,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         inspector.inspectAll();
         dropAllTables();
         context.getLogger().log("Dropped all tables from the configured database.%n");
+        InvocationPacer invocationPacer = new InvocationPacer();
         for (S3Event.S3EventNotificationRecord record : event.getRecords()) {
             String bucket = record.getS3().getBucket().getName();
             String key = URLDecoder.decode(record.getS3().getObject().getKey(), StandardCharsets.UTF_8);
@@ -81,7 +85,14 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
             int dataLineCount = countDataLines(bucket, key, versionId);
             int batchCount = batchCount(dataLineCount);
             pipelineInfoRepository.createPipeline(batchCount);
-            int dispatchedCount = dispatchBatches(bucket, key, versionId, objectIdentity, dataLineCount);
+            int dispatchedCount = dispatchBatches(
+                bucket,
+                key,
+                versionId,
+                objectIdentity,
+                dataLineCount,
+                invocationPacer
+            );
             context.getLogger().log(
                 "Dispatched %d batches for s3://%s/%s containing %d data lines.%n"
                     .formatted(dispatchedCount, bucket, key, dataLineCount)
@@ -132,10 +143,12 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         String sourceKey,
         String sourceVersionId,
         String objectIdentity,
-        int dataLineCount
+        int dataLineCount,
+        InvocationPacer invocationPacer
     ) {
         int batchIndex = 0;
         for (int startLine = 0; startLine < dataLineCount; startLine += BATCH_SIZE) {
+            invocationPacer.waitForNextIntervalIfNeeded();
             int endExclusiveLine = Math.min(startLine + BATCH_SIZE, dataLineCount);
             ProcessingRequest request = new ProcessingRequest(
                 sourceBucket,
@@ -152,9 +165,41 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                 .invocationType(InvocationType.EVENT)
                 .payload(SdkBytes.fromUtf8String(serialize(request)))
                 .build());
+            invocationPacer.recordInvocation();
             batchIndex++;
         }
         return batchIndex;
+    }
+
+    private static class InvocationPacer {
+        private int invocationsInInterval;
+        private long intervalStartedAtNanos;
+
+        private void waitForNextIntervalIfNeeded() {
+            if (invocationsInInterval < INVOCATIONS_PER_INTERVAL) {
+                return;
+            }
+
+            try {
+                long intervalNanos = TimeUnit.MILLISECONDS.toNanos(INVOCATION_INTERVAL_MILLIS);
+                long remainingNanos = intervalNanos - (System.nanoTime() - intervalStartedAtNanos);
+                if (remainingNanos > 0) {
+                    TimeUnit.NANOSECONDS.sleep(remainingNanos);
+                }
+                invocationsInInterval = 0;
+                intervalStartedAtNanos = System.nanoTime();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while pacing Lambda invocations", exception);
+            }
+        }
+
+        private void recordInvocation() {
+            if (invocationsInInterval == 0) {
+                intervalStartedAtNanos = System.nanoTime();
+            }
+            invocationsInInterval++;
+        }
     }
 
     private int batchCount(int dataLineCount) {
