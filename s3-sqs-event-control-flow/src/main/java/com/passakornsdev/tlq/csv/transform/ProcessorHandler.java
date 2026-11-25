@@ -76,7 +76,9 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
                 .messageAttributes(Map.of(
                     "objectIdentity", stringAttribute(request.objectIdentity()),
                     "sourceKey", stringAttribute(request.sourceKey()),
-                    "batchIndex", stringAttribute(Integer.toString(request.batchIndex()))
+                    "batchIndex", stringAttribute(Integer.toString(request.batchIndex())),
+                    "pipelineId", stringAttribute(Long.toString(request.pipelineId())),
+                    "batchUuid", stringAttribute(request.batchUuid())
                 ))
                 .build());
         } catch (IOException exception) {

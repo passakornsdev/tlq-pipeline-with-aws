@@ -5,6 +5,8 @@ public record ProcessingRequest(
     String sourceKey,
     String sourceVersionId,
     String objectIdentity,
+    long pipelineId,
+    String batchUuid,
     int startLine,
     int endExclusiveLine,
     int batchIndex

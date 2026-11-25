@@ -16,6 +16,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Objects;
+import java.util.UUID;
 
 import com.passakornsdev.tlq.csv.saaf.Inspector;
 import software.amazon.awssdk.core.SdkBytes;
@@ -81,12 +82,13 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
 
             int dataLineCount = countDataLines(bucket, key, versionId);
             int batchCount = batchCount(dataLineCount);
-            pipelineInfoRepository.createPipeline(batchCount);
+            long pipelineId = pipelineInfoRepository.createPipeline(batchCount);
             int dispatchedCount = dispatchBatches(
                 bucket,
                 key,
                 versionId,
                 objectIdentity,
+                pipelineId,
                 dataLineCount,
                 invocationPacer
             );
@@ -103,6 +105,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private void dropAllTables() {
         try (Connection connection = databaseConfig.openConnection();
              Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DROP TABLE IF EXISTS successful_batches");
             statement.executeUpdate("DROP TABLE IF EXISTS pipeline_info");
             statement.executeUpdate("DROP TABLE IF EXISTS loaded_sqs_messages");
             statement.executeUpdate("DROP TABLE IF EXISTS payments_raw");
@@ -140,6 +143,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         String sourceKey,
         String sourceVersionId,
         String objectIdentity,
+        long pipelineId,
         int dataLineCount,
         InvocationPacer invocationPacer
     ) {
@@ -152,6 +156,8 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                 sourceKey,
                 sourceVersionId,
                 Objects.requireNonNull(objectIdentity, "S3 event must include a version ID or sequencer"),
+                pipelineId,
+                UUID.randomUUID().toString(),
                 startLine,
                 endExclusiveLine,
                 batchIndex

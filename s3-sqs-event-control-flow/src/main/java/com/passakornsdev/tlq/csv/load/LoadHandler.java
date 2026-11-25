@@ -84,6 +84,8 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
             String objectIdentity = requiredMessageAttribute(message, "objectIdentity");
             String sourceKey = requiredMessageAttribute(message, "sourceKey");
             String batchIndex = requiredMessageAttribute(message, "batchIndex");
+            long pipelineId = Long.parseLong(requiredMessageAttribute(message, "pipelineId"));
+            String batchUuid = requiredMessageAttribute(message, "batchUuid");
             String objectKey = "sqs/%s/%s/batch-%s/%s"
                 .formatted(objectIdentity, sourceKey, batchIndex, message.getMessageId());
             String runId = objectIdentity;
@@ -95,8 +97,11 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
             context.getLogger().log(
                 "Database upsert finished for message %s.%n".formatted(message.getMessageId())
             );
-            context.getLogger().log("Updating pipeline progress for message %s.%n".formatted(message.getMessageId()));
-            boolean queryTriggered = pipelineInfoRepository.markLatestFinishedAndShouldQuery();
+            context.getLogger().log("Recording successful batch for message %s.%n".formatted(message.getMessageId()));
+            boolean queryTriggered = pipelineInfoRepository.recordSuccessfulBatchAndShouldQuery(
+                pipelineId,
+                batchUuid
+            );
             if (queryTriggered) {
                 context.getLogger().log("Invoking query function %s.%n".formatted(queryFunctionName));
                 invokeQuery();
