@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,10 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
                     "batchUuid", stringAttribute(request.batchUuid())
                 ))
                 .build());
+            context.getLogger().log(
+                "Sent SQS batch %s at Unix epoch time %d seconds.%n"
+                    .formatted(request.batchUuid(), Instant.now().getEpochSecond())
+            );
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to serialize batch SQS message", exception);
         }
