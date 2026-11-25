@@ -83,8 +83,8 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
                 ))
                 .build());
             context.getLogger().log(
-                "Sent SQS batch %s at Unix epoch time %d seconds.%n"
-                    .formatted(request.batchUuid(), Instant.now().getEpochSecond())
+                "Sent SQS batch %s at %d seconds.%n"
+                    .formatted(request.batchUuid(), System.currentTimeMillis())
             );
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to serialize batch SQS message", exception);

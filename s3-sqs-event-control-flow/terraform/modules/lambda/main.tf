@@ -74,25 +74,25 @@ resource "aws_iam_role" "query" {
 
 resource "aws_cloudwatch_log_group" "dispatcher" {
   name              = "/aws/lambda/${local.dispatcher_name}"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "processor" {
   name              = "/aws/lambda/${local.processor_name}"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "loader" {
   name              = "/aws/lambda/${var.project_name}-loader"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "query" {
   name              = "/aws/lambda/${local.query_name}"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
