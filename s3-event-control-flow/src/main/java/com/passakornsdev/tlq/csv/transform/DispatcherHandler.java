@@ -31,7 +31,7 @@ import software.amazon.awssdk.core.ResponseInputStream;
 import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironmentVariable;
 
 public class DispatcherHandler implements RequestHandler<S3Event, Void> {
-    private static final int BATCH_SIZE = 10_000;
+    private static final int BATCH_SIZE = 500;
 
     private final S3Client s3Client;
     private final LambdaClient lambdaClient;
