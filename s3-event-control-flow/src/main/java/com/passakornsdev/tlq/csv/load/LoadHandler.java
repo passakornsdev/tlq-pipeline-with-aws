@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
+import com.passakornsdev.tlq.csv.saaf.Inspector;
 import com.passakornsdev.tlq.csv.transform.PaymentRecord;
 import java.io.IOException;
 import java.net.URLDecoder;
@@ -77,6 +78,9 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
 
     @Override
     public Void handleRequest(S3Event event, Context context) {
+        Inspector inspector = new Inspector();
+        inspector.inspectAll();
+
         for (S3Event.S3EventNotificationRecord record : event.getRecords()) {
             String bucket = record.getS3().getBucket().getName();
             String objectKey = URLDecoder.decode(
@@ -102,6 +106,8 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
                     )
             );
         }
+        inspector.inspectAllDeltas();
+        context.getLogger().log(inspector.finish().toString());
         return null;
     }
 

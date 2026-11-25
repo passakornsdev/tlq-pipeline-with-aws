@@ -3,6 +3,7 @@ package com.passakornsdev.tlq.csv.query;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
+import com.passakornsdev.tlq.csv.saaf.Inspector;
 import software.amazon.awssdk.services.ses.SesClient;
 
 import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironmentVariable;
@@ -32,8 +33,12 @@ public class PaymentQueryHandler implements RequestHandler<Object, PaymentAggreg
 
     @Override
     public PaymentAggregateResponse handleRequest(Object request, Context context) {
+        Inspector inspector = new Inspector();
+        inspector.inspectAll();
         PaymentAggregateResponse response = repository.query();
         emailSender.send(PaymentAggregateCsv.render(response));
+        inspector.inspectAllDeltas();
+        context.getLogger().log(inspector.finish().toString());
         return response;
     }
 }

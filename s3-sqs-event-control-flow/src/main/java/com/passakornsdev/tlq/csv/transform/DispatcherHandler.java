@@ -16,6 +16,8 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Objects;
+
+import com.passakornsdev.tlq.csv.saaf.Inspector;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.lambda.model.InvocationType;
@@ -64,6 +66,8 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
 
     @Override
     public Void handleRequest(S3Event event, Context context) {
+        Inspector inspector = new Inspector();
+        inspector.inspectAll();
         dropAllTables();
         context.getLogger().log("Dropped all tables from the configured database.%n");
         for (S3Event.S3EventNotificationRecord record : event.getRecords()) {
@@ -83,6 +87,8 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                     .formatted(dispatchedCount, bucket, key, dataLineCount)
             );
         }
+        inspector.inspectAllDeltas();
+        context.getLogger().log(inspector.finish().toString());
         return null;
     }
 

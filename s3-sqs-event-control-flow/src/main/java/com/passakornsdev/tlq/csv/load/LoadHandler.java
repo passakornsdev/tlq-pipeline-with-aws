@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
+import com.passakornsdev.tlq.csv.saaf.Inspector;
 import com.passakornsdev.tlq.csv.transform.PaymentRecord;
 import com.passakornsdev.tlq.csv.transform.SqsBatchMessage;
 import java.io.IOException;
@@ -65,6 +66,8 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
 
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
+        Inspector inspector = new Inspector();
+        inspector.inspectAll();
         for (SQSEvent.SQSMessage message : event.getRecords()) {
             SqsBatchMessage batch = readBatch(message.getBody());
             PaymentRecord.validateHeaders(batch.header());
@@ -92,6 +95,8 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
                     )
             );
         }
+        inspector.inspectAllDeltas();
+        context.getLogger().log(inspector.finish().toString());
         return null;
     }
 
