@@ -66,9 +66,13 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
 
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
+        context.getLogger().log(
+            "Loader invocation started with %d SQS message(s).%n".formatted(event.getRecords().size())
+        );
         Inspector inspector = new Inspector();
         inspector.inspectAll();
         for (SQSEvent.SQSMessage message : event.getRecords()) {
+            context.getLogger().log("Starting SQS message %s.%n".formatted(message.getMessageId()));
             SqsBatchMessage batch = readBatch(message.getBody());
             PaymentRecord.validateHeaders(batch.header());
             List<PaymentRecord> records = batch.rows().stream().map(PaymentRecord::fromValues).toList();
@@ -78,9 +82,21 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
             String objectKey = "sqs/%s/%s/batch-%s/%s"
                 .formatted(objectIdentity, sourceKey, batchIndex, message.getMessageId());
             String runId = objectIdentity;
+            context.getLogger().log(
+                "Loading %d records from %s batch %s into the database.%n"
+                    .formatted(records.size(), sourceKey, batchIndex)
+            );
             boolean loaded = repository.loadIfNew(objectKey, runId, records);
-            boolean queryTriggered = loaded && pipelineInfoRepository.markLatestFinishedAndShouldQuery();
+            context.getLogger().log(
+                "Database load finished for message %s; loaded=%s.%n".formatted(message.getMessageId(), loaded)
+            );
+            boolean queryTriggered = false;
+            if (loaded) {
+                context.getLogger().log("Updating pipeline progress for message %s.%n".formatted(message.getMessageId()));
+                queryTriggered = pipelineInfoRepository.markLatestFinishedAndShouldQuery();
+            }
             if (queryTriggered) {
+                context.getLogger().log("Invoking query function %s.%n".formatted(queryFunctionName));
                 invokeQuery();
             }
             context.getLogger().log(

@@ -16,7 +16,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 import com.passakornsdev.tlq.csv.saaf.Inspector;
 import software.amazon.awssdk.core.SdkBytes;
@@ -32,8 +31,6 @@ import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironment
 
 public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private static final int BATCH_SIZE = 500;
-    private static final int INVOCATIONS_PER_INTERVAL = 75;
-    private static final long INVOCATION_INTERVAL_MILLIS = 2_000L;
 
     private final S3Client s3Client;
     private final LambdaClient lambdaClient;
@@ -169,37 +166,6 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
             batchIndex++;
         }
         return batchIndex;
-    }
-
-    private static class InvocationPacer {
-        private int invocationsInInterval;
-        private long intervalStartedAtNanos;
-
-        private void waitForNextIntervalIfNeeded() {
-            if (invocationsInInterval < INVOCATIONS_PER_INTERVAL) {
-                return;
-            }
-
-            try {
-                long intervalNanos = TimeUnit.MILLISECONDS.toNanos(INVOCATION_INTERVAL_MILLIS);
-                long remainingNanos = intervalNanos - (System.nanoTime() - intervalStartedAtNanos);
-                if (remainingNanos > 0) {
-                    TimeUnit.NANOSECONDS.sleep(remainingNanos);
-                }
-                invocationsInInterval = 0;
-                intervalStartedAtNanos = System.nanoTime();
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Interrupted while pacing Lambda invocations", exception);
-            }
-        }
-
-        private void recordInvocation() {
-            if (invocationsInInterval == 0) {
-                intervalStartedAtNanos = System.nanoTime();
-            }
-            invocationsInInterval++;
-        }
     }
 
     private int batchCount(int dataLineCount) {

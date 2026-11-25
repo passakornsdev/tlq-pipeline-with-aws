@@ -254,7 +254,7 @@ resource "aws_lambda_function" "processor" {
   handler          = "com.passakornsdev.tlq.csv.transform.ProcessorHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1024
+  memory_size      = 1769
   timeout          = 900
   tags             = var.tags
 
@@ -316,7 +316,7 @@ resource "aws_lambda_function" "loader" {
   handler          = "com.passakornsdev.tlq.csv.load.LoadHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1024
+  memory_size      = 1769
   timeout          = 900
   tags             = var.tags
 

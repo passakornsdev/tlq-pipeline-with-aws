@@ -7,7 +7,7 @@ resource "aws_sqs_queue" "dead_letter" {
 resource "aws_sqs_queue" "batches" {
   name                       = "${var.project_name}-batches"
   max_message_size           = 1048576
-  visibility_timeout_seconds = 960
+  visibility_timeout_seconds = 5400
   message_retention_seconds  = 86400
   receive_wait_time_seconds  = 20
   redrive_policy = jsonencode({

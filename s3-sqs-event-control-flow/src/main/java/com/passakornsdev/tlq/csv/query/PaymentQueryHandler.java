@@ -33,9 +33,12 @@ public class PaymentQueryHandler implements RequestHandler<Object, PaymentAggreg
 
     @Override
     public PaymentAggregateResponse handleRequest(Object request, Context context) {
+        context.getLogger().log("Payment query invocation started.%n");
         Inspector inspector = new Inspector();
         inspector.inspectAll();
+        context.getLogger().log("Querying payment aggregates from the database.%n");
         PaymentAggregateResponse response = repository.query();
+        context.getLogger().log("Payment aggregate query finished; sending email.%n");
         emailSender.send(PaymentAggregateCsv.render(response));
         inspector.inspectAllDeltas();
         context.getLogger().log(inspector.finish().toString());
