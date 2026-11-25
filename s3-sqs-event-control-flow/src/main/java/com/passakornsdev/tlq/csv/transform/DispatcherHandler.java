@@ -32,6 +32,8 @@ import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironment
 
 public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private static final int BATCH_SIZE = 500;
+    private static final int BATCHES_PER_DISPATCH_CYCLE = 50;
+    private static final long DISPATCH_CYCLE_INTERVAL_MILLIS = 2_000L;
 
     private final S3Client s3Client;
     private final LambdaClient lambdaClient;
@@ -71,7 +73,6 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         inspector.inspectAll();
         dropAllTables();
         context.getLogger().log("Dropped all tables from the configured database.%n");
-        InvocationPacer invocationPacer = new InvocationPacer();
         for (S3Event.S3EventNotificationRecord record : event.getRecords()) {
             String bucket = record.getS3().getBucket().getName();
             String key = URLDecoder.decode(record.getS3().getObject().getKey(), StandardCharsets.UTF_8);
@@ -89,8 +90,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                 versionId,
                 objectIdentity,
                 pipelineId,
-                dataLineCount,
-                invocationPacer
+                dataLineCount
             );
             context.getLogger().log(
                 "Dispatched %d batches for s3://%s/%s containing %d data lines.%n"
@@ -144,32 +144,43 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         String sourceVersionId,
         String objectIdentity,
         long pipelineId,
-        int dataLineCount,
-        InvocationPacer invocationPacer
+        int dataLineCount
     ) {
         int batchIndex = 0;
-        for (int startLine = 0; startLine < dataLineCount; startLine += BATCH_SIZE) {
-            invocationPacer.waitForNextIntervalIfNeeded();
-            int endExclusiveLine = Math.min(startLine + BATCH_SIZE, dataLineCount);
-            ProcessingRequest request = new ProcessingRequest(
-                sourceBucket,
-                sourceKey,
-                sourceVersionId,
-                Objects.requireNonNull(objectIdentity, "S3 event must include a version ID or sequencer"),
-                pipelineId,
-                UUID.randomUUID().toString(),
-                startLine,
-                endExclusiveLine,
-                batchIndex
-            );
+        int startLine = 0;
+        while (startLine < dataLineCount) {
+            for (int batchesInCycle = 0;
+                 batchesInCycle < BATCHES_PER_DISPATCH_CYCLE && startLine < dataLineCount;
+                 batchesInCycle++) {
+                int endExclusiveLine = Math.min(startLine + BATCH_SIZE, dataLineCount);
+                ProcessingRequest request = new ProcessingRequest(
+                    sourceBucket,
+                    sourceKey,
+                    sourceVersionId,
+                    Objects.requireNonNull(objectIdentity, "S3 event must include a version ID or sequencer"),
+                    pipelineId,
+                    UUID.randomUUID().toString(),
+                    startLine,
+                    endExclusiveLine,
+                    batchIndex
+                );
 
-            lambdaClient.invoke(InvokeRequest.builder()
-                .functionName(processorFunctionName)
-                .invocationType(InvocationType.EVENT)
-                .payload(SdkBytes.fromUtf8String(serialize(request)))
-                .build());
-            invocationPacer.recordInvocation();
-            batchIndex++;
+                lambdaClient.invoke(InvokeRequest.builder()
+                    .functionName(processorFunctionName)
+                    .invocationType(InvocationType.EVENT)
+                    .payload(SdkBytes.fromUtf8String(serialize(request)))
+                    .build());
+                startLine = endExclusiveLine;
+                batchIndex++;
+            }
+            if (startLine < dataLineCount) {
+                try {
+                    Thread.sleep(DISPATCH_CYCLE_INTERVAL_MILLIS);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while waiting between batch dispatch cycles", exception);
+                }
+            }
         }
         return batchIndex;
     }
