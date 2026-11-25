@@ -4,6 +4,11 @@ import java.util.List;
 
 public record SqsBatchMessage(
     List<String> header,
-    List<List<String>> rows
+    List<Row> rows
 ) {
+    public record Row(
+        String recordUuid,
+        List<String> values
+    ) {
+    }
 }

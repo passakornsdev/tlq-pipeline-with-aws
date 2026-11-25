@@ -8,8 +8,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -56,10 +58,17 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
         Inspector inspector = new Inspector();
         inspector.inspectAll();
         List<PaymentRecord> records = readBatch(request);
+        List<SqsBatchMessage.Row> rows = new ArrayList<>(records.size());
+        for (PaymentRecord record : records) {
+            rows.add(new SqsBatchMessage.Row(
+                UUID.randomUUID().toString(),
+                record.toValues()
+            ));
+        }
 
         try {
             String body = objectMapper.writeValueAsString(
-                new SqsBatchMessage(PaymentRecord.headers(), records.stream().map(PaymentRecord::toValues).toList())
+                new SqsBatchMessage(PaymentRecord.headers(), rows)
             );
             sqsClient.sendMessage(SendMessageRequest.builder()
                 .queueUrl(queueUrl)

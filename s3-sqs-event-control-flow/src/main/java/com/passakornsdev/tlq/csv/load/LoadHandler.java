@@ -75,7 +75,12 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
             context.getLogger().log("Starting SQS message %s.%n".formatted(message.getMessageId()));
             SqsBatchMessage batch = readBatch(message.getBody());
             PaymentRecord.validateHeaders(batch.header());
-            List<PaymentRecord> records = batch.rows().stream().map(PaymentRecord::fromValues).toList();
+            List<PaymentRecord> records = batch.rows().stream()
+                .map(row -> PaymentRecord.fromValues(row.values()))
+                .toList();
+            List<String> recordUuids = batch.rows().stream()
+                .map(SqsBatchMessage.Row::recordUuid)
+                .toList();
             String objectIdentity = requiredMessageAttribute(message, "objectIdentity");
             String sourceKey = requiredMessageAttribute(message, "sourceKey");
             String batchIndex = requiredMessageAttribute(message, "batchIndex");
@@ -86,23 +91,19 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
                 "Loading %d records from %s batch %s into the database.%n"
                     .formatted(records.size(), sourceKey, batchIndex)
             );
-            boolean loaded = repository.loadIfNew(objectKey, runId, records);
+            repository.upsert(recordUuids, objectKey, runId, records);
             context.getLogger().log(
-                "Database load finished for message %s; loaded=%s.%n".formatted(message.getMessageId(), loaded)
+                "Database upsert finished for message %s.%n".formatted(message.getMessageId())
             );
-            boolean queryTriggered = false;
-            if (loaded) {
-                context.getLogger().log("Updating pipeline progress for message %s.%n".formatted(message.getMessageId()));
-                queryTriggered = pipelineInfoRepository.markLatestFinishedAndShouldQuery();
-            }
+            context.getLogger().log("Updating pipeline progress for message %s.%n".formatted(message.getMessageId()));
+            boolean queryTriggered = pipelineInfoRepository.markLatestFinishedAndShouldQuery();
             if (queryTriggered) {
                 context.getLogger().log("Invoking query function %s.%n".formatted(queryFunctionName));
                 invokeQuery();
             }
             context.getLogger().log(
-                "%s %d records from %s batch %s with run_id=%s%s%n"
+                "Upserted %d records from %s batch %s with run_id=%s%s%n"
                     .formatted(
-                        loaded ? "Loaded" : "Skipped duplicate",
                         records.size(),
                         sourceKey,
                         batchIndex,

@@ -10,6 +10,7 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 final class LoadRepository {
     private static final List<String> COLUMNS = PaymentRecord.jsonPropertyNames();
@@ -20,48 +21,35 @@ final class LoadRepository {
         this.databaseConfig = databaseConfig;
     }
 
-    boolean loadIfNew(String objectKey, String runId, List<PaymentRecord> records) {
+    void upsert(List<String> recordUuids, String objectKey, String runId, List<PaymentRecord> records) {
+        if (recordUuids.size() != records.size()) {
+            throw new IllegalArgumentException("Each payment record must have a UUID");
+        }
+
         try (Connection connection = databaseConfig.openConnection()) {
+            connection.setAutoCommit(true);
             ensureSchema(connection);
-            connection.setAutoCommit(false);
-            try {
-                if (!claimObject(connection, objectKey)) {
-                    connection.rollback();
-                    return false;
-                }
-                insertRecords(connection, objectKey, runId, records);
-                connection.commit();
-                return true;
-            } catch (SQLException | RuntimeException exception) {
-                connection.rollback();
-                throw exception;
-            }
+            upsertRecords(connection, recordUuids, objectKey, runId, records);
         } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to load SQS message " + objectKey, exception);
+            throw new IllegalStateException("Unable to upsert SQS batch " + objectKey, exception);
         }
     }
 
     private void ensureSchema(Connection connection) throws SQLException {
         new PipelineInfoRepository(databaseConfig).ensureSchema(connection);
         try (Statement statement = connection.createStatement()) {
-            statement.execute("""
-                CREATE TABLE IF NOT EXISTS loaded_sqs_messages (
-                    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    object_key VARCHAR(1024) NOT NULL,
-                    loaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """);
-
             String columns = COLUMNS.stream()
                 .map(column -> "`%s` %s".formatted(column, columnType(column)))
                 .collect(Collectors.joining(",\n"));
             statement.execute("""
                 CREATE TABLE IF NOT EXISTS payments_raw (
                     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    record_uuid CHAR(36) NOT NULL,
                     run_id VARCHAR(1024) NOT NULL,
                     source_object_key VARCHAR(1024) NOT NULL,
                     %s,
-                    loaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    loaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_payments_raw_record_uuid (record_uuid)
                 )
                 """.formatted(columns));
         }
@@ -76,36 +64,36 @@ final class LoadRepository {
         };
     }
 
-    private boolean claimObject(Connection connection, String objectKey) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-            "INSERT IGNORE INTO loaded_sqs_messages (object_key) VALUES (?)"
-        )) {
-            statement.setString(1, objectKey);
-            return statement.executeUpdate() == 1;
-        }
-    }
-
-    private void insertRecords(
+    private void upsertRecords(
         Connection connection,
+        List<String> recordUuids,
         String objectKey,
         String runId,
         List<PaymentRecord> records
     ) throws SQLException {
         String columns = COLUMNS.stream().map(column -> "`%s`".formatted(column))
             .collect(Collectors.joining(", "));
-        String placeholders = IntStream.range(0, COLUMNS.size() + 2)
+        String updates = Stream.concat(Stream.of("run_id", "source_object_key"), COLUMNS.stream())
+            .map(column -> "`%s` = VALUES(`%s`)".formatted(column, column))
+            .collect(Collectors.joining(", "));
+        String placeholders = IntStream.range(0, COLUMNS.size() + 3)
             .mapToObj(index -> "?")
             .collect(Collectors.joining(", "));
-        String sql = "INSERT INTO payments_raw (run_id, source_object_key, %s) VALUES (%s)"
-            .formatted(columns, placeholders);
+        String sql = """
+            INSERT INTO payments_raw (record_uuid, run_id, source_object_key, %s)
+            VALUES (%s)
+            ON DUPLICATE KEY UPDATE %s, loaded_at = CURRENT_TIMESTAMP
+            """.formatted(columns, placeholders, updates);
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (PaymentRecord record : records) {
-                statement.setString(1, runId);
-                statement.setString(2, objectKey);
+            for (int rowIndex = 0; rowIndex < records.size(); rowIndex++) {
+                PaymentRecord record = records.get(rowIndex);
+                statement.setString(1, recordUuids.get(rowIndex));
+                statement.setString(2, runId);
+                statement.setString(3, objectKey);
                 List<String> values = record.toValues();
-                for (int index = 0; index < values.size(); index++) {
-                    statement.setString(index + 3, values.get(index));
+                for (int valueIndex = 0; valueIndex < values.size(); valueIndex++) {
+                    statement.setString(valueIndex + 4, values.get(valueIndex));
                 }
                 statement.addBatch();
             }
