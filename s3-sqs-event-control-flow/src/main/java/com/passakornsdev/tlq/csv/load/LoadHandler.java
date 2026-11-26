@@ -11,6 +11,7 @@ import com.passakornsdev.tlq.csv.saaf.Inspector;
 import com.passakornsdev.tlq.csv.transform.PaymentRecord;
 import com.passakornsdev.tlq.csv.transform.SqsBatchMessage;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.lambda.model.InvocationType;
@@ -73,7 +74,11 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
         inspector.inspectAll();
         for (SQSEvent.SQSMessage message : event.getRecords()) {
             context.getLogger().log("Starting SQS message %s.%n".formatted(message.getMessageId()));
-            SqsBatchMessage batch = readBatch(message.getBody());
+            String messageBody = message.getBody();
+            context.getLogger().log(
+                "SQS message %s body size: %.2f KiB.%n".formatted(message.getMessageId(), messageBody.getBytes(StandardCharsets.UTF_8).length / 1024.0)
+            );
+            SqsBatchMessage batch = readBatch(messageBody);
             PaymentRecord.validateHeaders(batch.header());
             List<PaymentRecord> records = batch.rows().stream()
                 .map(row -> PaymentRecord.fromValues(row.values()))
