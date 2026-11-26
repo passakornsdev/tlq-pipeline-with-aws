@@ -5,8 +5,12 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.TimeZone;
 
 final class PaymentQueryRepository {
     private static final String AMOUNT_SUM = """
@@ -34,6 +38,33 @@ final class PaymentQueryRepository {
             );
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to query payment aggregates", exception);
+        }
+    }
+
+    Long latestDispatcherStartTime(String dispatcherFunctionName, long queryStartTimeMillis) {
+        try (Connection connection = databaseConfig.openConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                 SELECT start_time
+                 FROM saaf_invocations
+                 WHERE function_name = ? AND start_time <= ?
+                 ORDER BY start_time DESC
+                 LIMIT 1
+                 """)) {
+            statement.setString(1, dispatcherFunctionName);
+            statement.setTimestamp(
+                2,
+                Timestamp.from(Instant.ofEpochMilli(queryStartTimeMillis)),
+                Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+            );
+            try (ResultSet results = statement.executeQuery()) {
+                if (!results.next()) {
+                    return null;
+                }
+                Timestamp startTime = results.getTimestamp(1, Calendar.getInstance(TimeZone.getTimeZone("UTC")));
+                return startTime == null ? null : startTime.getTime();
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to find dispatcher SAAF start time", exception);
         }
     }
 

@@ -278,12 +278,13 @@ resource "aws_lambda_function" "query" {
 
   environment {
     variables = {
-      DB_HOST        = var.db_host
-      DB_PORT        = tostring(var.db_port)
-      DB_NAME        = var.db_name
-      DB_SECRET_ARN  = var.db_secret_arn
-      SES_FROM_EMAIL = var.ses_from_email
-      SES_TO_EMAIL   = var.ses_to_email
+      DB_HOST                  = var.db_host
+      DB_PORT                  = tostring(var.db_port)
+      DB_NAME                  = var.db_name
+      DB_SECRET_ARN            = var.db_secret_arn
+      DISPATCHER_FUNCTION_NAME = aws_lambda_function.dispatcher.function_name
+      SES_FROM_EMAIL           = var.ses_from_email
+      SES_TO_EMAIL             = var.ses_to_email
     }
   }
 

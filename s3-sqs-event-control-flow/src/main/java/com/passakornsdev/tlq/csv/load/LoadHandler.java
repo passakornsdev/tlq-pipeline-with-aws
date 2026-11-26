@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
+import com.passakornsdev.tlq.csv.database.SaafInvocationRecorder;
 import com.passakornsdev.tlq.csv.saaf.Inspector;
 import com.passakornsdev.tlq.csv.transform.PaymentRecord;
 import com.passakornsdev.tlq.csv.transform.SqsBatchMessage;
@@ -25,6 +26,7 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
     private final ObjectMapper objectMapper;
     private final LoadRepository repository;
     private final PipelineInfoRepository pipelineInfoRepository;
+    private final SaafInvocationRecorder invocationRecorder;
     private final String queryFunctionName;
 
     public LoadHandler() {
@@ -47,6 +49,7 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
             objectMapper,
             new LoadRepository(databaseConfig),
             new PipelineInfoRepository(databaseConfig),
+            new SaafInvocationRecorder(databaseConfig),
             queryFunctionName
         );
     }
@@ -56,23 +59,56 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
         ObjectMapper objectMapper,
         LoadRepository repository,
         PipelineInfoRepository pipelineInfoRepository,
+        SaafInvocationRecorder invocationRecorder,
         String queryFunctionName
     ) {
         this.lambdaClient = lambdaClient;
         this.objectMapper = objectMapper;
         this.repository = repository;
         this.pipelineInfoRepository = pipelineInfoRepository;
+        this.invocationRecorder = invocationRecorder;
         this.queryFunctionName = queryFunctionName;
     }
 
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
         Inspector inspector = new Inspector();
+        Throwable failure = null;
+        try {
+            return processRequest(event, context, inspector);
+        } catch (RuntimeException | Error exception) {
+            failure = exception;
+            throw exception;
+        } finally {
+            invocationRecorder.record(inspector, context, failure);
+        }
+    }
+
+    private Void processRequest(SQSEvent event, Context context, Inspector inspector) {
         inspector.inspectContainer();
         context.getLogger().log(
             "Loader invocation started with %d SQS message(s).%n".formatted(event.getRecords().size())
         );
+        Object initializationTimeMetric = inspector.getAttribute("initializationTime");
+        if (!(initializationTimeMetric instanceof Number initializationTime)) {
+            throw new IllegalStateException("SAAF initializationTime is unavailable");
+        }
         for (SQSEvent.SQSMessage message : event.getRecords()) {
+            Long sqsSentAtMillis = optionalMessageAttribute(message, "sqsSentAtMs");
+            if (sqsSentAtMillis == null) {
+                inspector.addAttribute("sqsLatencyMs", null);
+                context.getLogger().log(
+                    "SQS message %s has no send timestamp; latency will be stored as NULL.%n"
+                        .formatted(message.getMessageId())
+                );
+            } else {
+                long sqsLatencyMillis = initializationTime.longValue() - sqsSentAtMillis;
+                inspector.addAttribute("sqsLatencyMs", sqsLatencyMillis);
+                context.getLogger().log(
+                    "SQS message %s SAAF initializationTime minus send time: %d ms.%n"
+                        .formatted(message.getMessageId(), sqsLatencyMillis)
+                );
+            }
             context.getLogger().log("Starting SQS message %s.%n".formatted(message.getMessageId()));
             String messageBody = message.getBody();
             context.getLogger().log(
@@ -122,7 +158,6 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
                     )
             );
         }
-        context.getLogger().log(inspector.finish().toString());
         return null;
     }
 
@@ -143,6 +178,18 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
             throw new IllegalArgumentException("SQS message attribute %s is required".formatted(name));
         }
         return attribute.getStringValue();
+    }
+
+    private Long optionalMessageAttribute(SQSEvent.SQSMessage message, String name) {
+        var attribute = message.getMessageAttributes().get(name);
+        if (attribute == null || attribute.getStringValue() == null || attribute.getStringValue().isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(attribute.getStringValue());
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("SQS message attribute %s must be a long integer".formatted(name), exception);
+        }
     }
 
     private void invokeQuery() {

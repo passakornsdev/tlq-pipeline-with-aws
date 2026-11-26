@@ -7,6 +7,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
+import com.passakornsdev.tlq.csv.database.SaafInvocationRepository;
+import com.passakornsdev.tlq.csv.database.SaafInvocationRecorder;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -42,6 +44,8 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private final String queueUrl;
     private final DatabaseConfig databaseConfig;
     private final PipelineInfoRepository pipelineInfoRepository;
+    private final SaafInvocationRepository invocationRepository;
+    private final SaafInvocationRecorder invocationRecorder;
 
     public DispatcherHandler() {
         this(
@@ -69,11 +73,26 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         this.queueUrl = queueUrl;
         this.databaseConfig = databaseConfig;
         this.pipelineInfoRepository = new PipelineInfoRepository(databaseConfig);
+        this.invocationRepository = new SaafInvocationRepository(databaseConfig);
+        this.invocationRecorder = new SaafInvocationRecorder(invocationRepository);
     }
 
     @Override
     public Void handleRequest(S3Event event, Context context) {
         Inspector inspector = new Inspector();
+        Throwable failure = null;
+        try {
+            return processRequest(event, context, inspector);
+        } catch (RuntimeException | Error exception) {
+            failure = exception;
+            throw exception;
+        } finally {
+            invocationRecorder.record(inspector, context, failure);
+        }
+    }
+
+    private Void processRequest(S3Event event, Context context, Inspector inspector) {
+        invocationRepository.ensureSchema();
         inspector.inspectContainer();
         dropAllTables();
         context.getLogger().log("Dropped all tables from the configured database.%n");
@@ -101,7 +120,6 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                     .formatted(dispatchedCount, bucket, key, dataLineCount)
             );
         }
-        context.getLogger().log(inspector.finish().toString());
         return null;
     }
 
@@ -193,6 +211,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
 
         String batchUuid = UUID.randomUUID().toString();
         String body = serialize(new SqsBatchMessage(PaymentRecord.headers(), rows));
+        long sqsSentAtMillis = System.currentTimeMillis();
         sqsClient.sendMessage(SendMessageRequest.builder()
             .queueUrl(queueUrl)
             .messageBody(body)
@@ -201,7 +220,8 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                 "sourceKey", stringAttribute(sourceKey),
                 "batchIndex", stringAttribute(Integer.toString(batchIndex)),
                 "pipelineId", stringAttribute(Long.toString(pipelineId)),
-                "batchUuid", stringAttribute(batchUuid)
+                "batchUuid", stringAttribute(batchUuid),
+                "sqsSentAtMs", stringAttribute(Long.toString(sqsSentAtMillis))
             ))
             .build());
     }
