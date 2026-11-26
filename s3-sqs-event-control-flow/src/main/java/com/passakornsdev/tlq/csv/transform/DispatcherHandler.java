@@ -74,7 +74,7 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     @Override
     public Void handleRequest(S3Event event, Context context) {
         Inspector inspector = new Inspector();
-        inspector.inspectAll();
+        inspector.inspectContainer();
         dropAllTables();
         context.getLogger().log("Dropped all tables from the configured database.%n");
         for (S3Event.S3EventNotificationRecord record : event.getRecords()) {
@@ -101,7 +101,6 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                     .formatted(dispatchedCount, bucket, key, dataLineCount)
             );
         }
-        inspector.inspectAllDeltas();
         context.getLogger().log(inspector.finish().toString());
         return null;
     }

@@ -34,6 +34,7 @@ final class PaymentAggregateEmailSender {
             Content-Type: text/plain; charset=UTF-8
 
             The payment aggregate report is attached.
+            Generated at (epoch milliseconds): %d
 
             --%s
             Content-Type: text/csv; name="payment-aggregates.csv"
@@ -42,7 +43,16 @@ final class PaymentAggregateEmailSender {
 
             %s
             --%s--
-            """.formatted(sender, recipient, BOUNDARY, BOUNDARY, BOUNDARY, encodedCsv, BOUNDARY);
+            """.formatted(
+                sender,
+                recipient,
+                BOUNDARY,
+                BOUNDARY,
+                System.currentTimeMillis(),
+                BOUNDARY,
+                encodedCsv,
+                BOUNDARY
+            );
 
         sesClient.sendRawEmail(SendRawEmailRequest.builder()
             .rawMessage(RawMessage.builder()

@@ -67,11 +67,11 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
 
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
+        Inspector inspector = new Inspector();
+        inspector.inspectContainer();
         context.getLogger().log(
             "Loader invocation started with %d SQS message(s).%n".formatted(event.getRecords().size())
         );
-        Inspector inspector = new Inspector();
-        inspector.inspectAll();
         for (SQSEvent.SQSMessage message : event.getRecords()) {
             context.getLogger().log("Starting SQS message %s.%n".formatted(message.getMessageId()));
             String messageBody = message.getBody();
@@ -122,7 +122,6 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
                     )
             );
         }
-        inspector.inspectAllDeltas();
         context.getLogger().log(inspector.finish().toString());
         return null;
     }
