@@ -65,6 +65,7 @@ resource "aws_db_instance" "database" {
   engine                      = "mysql"
   instance_class              = var.instance_class
   allocated_storage           = 20
+  storage_type                = "gp3"
   db_name                     = var.database_name
   username                    = "admin"
   manage_master_user_password = true

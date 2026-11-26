@@ -28,7 +28,7 @@ variable "tags" {
 variable "db_instance_class" {
   description = "Instance class for the single-AZ MySQL RDS instance."
   type        = string
-  default     = "db.t4g.xlarge"
+  default     = "db.m7g.xlarge"
 }
 
 variable "db_port" {

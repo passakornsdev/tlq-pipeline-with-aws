@@ -196,7 +196,7 @@ resource "aws_lambda_function" "dispatcher" {
   handler          = "com.passakornsdev.tlq.csv.transform.DispatcherHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1024
+  memory_size      = 1769
   timeout          = 900
   tags             = var.tags
 
