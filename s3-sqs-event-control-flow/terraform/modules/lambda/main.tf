@@ -196,7 +196,7 @@ resource "aws_lambda_function" "dispatcher" {
   handler          = "com.passakornsdev.tlq.csv.transform.DispatcherHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 512
+  memory_size      = 1024
   timeout          = 900
   tags             = var.tags
 
@@ -208,10 +208,10 @@ resource "aws_lambda_function" "dispatcher" {
   environment {
     variables = {
       SQS_QUEUE_URL = var.sqs_queue_url
-      DB_HOST                 = var.db_host
-      DB_PORT                 = tostring(var.db_port)
-      DB_NAME                 = var.db_name
-      DB_SECRET_ARN           = var.db_secret_arn
+      DB_HOST       = var.db_host
+      DB_PORT       = tostring(var.db_port)
+      DB_NAME       = var.db_name
+      DB_SECRET_ARN = var.db_secret_arn
     }
   }
 
@@ -222,6 +222,11 @@ resource "aws_lambda_function" "dispatcher" {
   ]
 }
 
+resource "aws_lambda_function_event_invoke_config" "dispatcher" {
+  function_name          = aws_lambda_function.dispatcher.function_name
+  maximum_retry_attempts = 0
+}
+
 resource "aws_lambda_function" "loader" {
   function_name    = "${var.project_name}-loader"
   role             = aws_iam_role.loader.arn
@@ -229,7 +234,7 @@ resource "aws_lambda_function" "loader" {
   handler          = "com.passakornsdev.tlq.csv.load.LoadHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 256
+  memory_size      = 512
   timeout          = 300
   tags             = var.tags
 
