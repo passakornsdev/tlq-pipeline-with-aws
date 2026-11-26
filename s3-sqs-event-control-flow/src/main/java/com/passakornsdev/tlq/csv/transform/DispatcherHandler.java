@@ -34,8 +34,6 @@ import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironment
 
 public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private static final int BATCH_SIZE = 1000;
-    private static final int BATCHES_PER_DISPATCH_CYCLE = 50;
-    private static final long DISPATCH_CYCLE_INTERVAL_MILLIS = 1_000L;
 
     private final S3Client s3Client;
     private final SqsClient sqsClient;
@@ -155,31 +153,19 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         int batchIndex = 0;
         int startLine = 0;
         while (startLine < dataLineCount) {
-            for (int batchesInCycle = 0;
-                 batchesInCycle < BATCHES_PER_DISPATCH_CYCLE && startLine < dataLineCount;
-                 batchesInCycle++) {
-                int endExclusiveLine = Math.min(startLine + BATCH_SIZE, dataLineCount);
-                publishBatch(
-                    sourceBucket,
-                    sourceKey,
-                    sourceVersionId,
-                    Objects.requireNonNull(objectIdentity, "S3 event must include a version ID or sequencer"),
-                    pipelineId,
-                    startLine,
-                    endExclusiveLine,
-                    batchIndex
-                );
-                startLine = endExclusiveLine;
-                batchIndex++;
-            }
-            if (startLine < dataLineCount) {
-                try {
-                    Thread.sleep(DISPATCH_CYCLE_INTERVAL_MILLIS);
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException("Interrupted while waiting between batch dispatch cycles", exception);
-                }
-            }
+            int endExclusiveLine = Math.min(startLine + BATCH_SIZE, dataLineCount);
+            publishBatch(
+                sourceBucket,
+                sourceKey,
+                sourceVersionId,
+                Objects.requireNonNull(objectIdentity, "S3 event must include a version ID or sequencer"),
+                pipelineId,
+                startLine,
+                endExclusiveLine,
+                batchIndex
+            );
+            startLine = endExclusiveLine;
+            batchIndex++;
         }
         return batchIndex;
     }
