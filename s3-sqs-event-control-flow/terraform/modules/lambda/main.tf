@@ -1,28 +1,10 @@
 locals {
   dispatcher_name = "${var.project_name}-dispatcher"
-  processor_name  = "${var.project_name}-processor"
   query_name      = "${var.project_name}-query"
 }
 
 resource "aws_iam_role" "dispatcher" {
   name = "${local.dispatcher_name}-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-      Action = "sts:AssumeRole"
-    }]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role" "processor" {
-  name = "${local.processor_name}-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -78,12 +60,6 @@ resource "aws_cloudwatch_log_group" "dispatcher" {
   tags              = var.tags
 }
 
-resource "aws_cloudwatch_log_group" "processor" {
-  name              = "/aws/lambda/${local.processor_name}"
-  retention_in_days = 3
-  tags              = var.tags
-}
-
 resource "aws_cloudwatch_log_group" "loader" {
   name              = "/aws/lambda/${var.project_name}-loader"
   retention_in_days = 3
@@ -115,35 +91,6 @@ resource "aws_iam_role_policy" "dispatcher" {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = var.db_secret_arn
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:GetObjectVersion"]
-        Resource = "${var.source_bucket_arn}/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = "lambda:InvokeFunction"
-        Resource = aws_lambda_function.processor.arn
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy" "processor" {
-  name = "${local.processor_name}-policy"
-  role = aws_iam_role.processor.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "${aws_cloudwatch_log_group.processor.arn}:*"
       },
       {
         Effect   = "Allow"
@@ -232,11 +179,6 @@ resource "aws_iam_role_policy_attachment" "dispatcher_vpc_access" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "processor_vpc_access" {
-  role       = aws_iam_role.processor.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
-
 resource "aws_iam_role_policy_attachment" "loader_vpc_access" {
   role       = aws_iam_role.loader.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -247,14 +189,14 @@ resource "aws_iam_role_policy_attachment" "query_vpc_access" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_lambda_function" "processor" {
-  function_name    = local.processor_name
-  role             = aws_iam_role.processor.arn
+resource "aws_lambda_function" "dispatcher" {
+  function_name    = local.dispatcher_name
+  role             = aws_iam_role.dispatcher.arn
   runtime          = "java25"
-  handler          = "com.passakornsdev.tlq.csv.transform.ProcessorHandler::handleRequest"
+  handler          = "com.passakornsdev.tlq.csv.transform.DispatcherHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1769
+  memory_size      = 512
   timeout          = 900
   tags             = var.tags
 
@@ -266,35 +208,6 @@ resource "aws_lambda_function" "processor" {
   environment {
     variables = {
       SQS_QUEUE_URL = var.sqs_queue_url
-    }
-  }
-
-  depends_on = [
-    aws_cloudwatch_log_group.processor,
-    aws_iam_role_policy.processor,
-    aws_iam_role_policy_attachment.processor_vpc_access
-  ]
-}
-
-resource "aws_lambda_function" "dispatcher" {
-  function_name    = local.dispatcher_name
-  role             = aws_iam_role.dispatcher.arn
-  runtime          = "java25"
-  handler          = "com.passakornsdev.tlq.csv.transform.DispatcherHandler::handleRequest"
-  filename         = var.lambda_filename
-  source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1024
-  timeout          = 900
-  tags             = var.tags
-
-  vpc_config {
-    subnet_ids         = var.subnet_ids
-    security_group_ids = [var.lambda_security_group_id]
-  }
-
-  environment {
-    variables = {
-      PROCESSOR_FUNCTION_NAME = aws_lambda_function.processor.function_name
       DB_HOST                 = var.db_host
       DB_PORT                 = tostring(var.db_port)
       DB_NAME                 = var.db_name
@@ -316,8 +229,8 @@ resource "aws_lambda_function" "loader" {
   handler          = "com.passakornsdev.tlq.csv.load.LoadHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1769
-  timeout          = 900
+  memory_size      = 256
+  timeout          = 300
   tags             = var.tags
 
   vpc_config {

@@ -1,6 +1,6 @@
 # AWS Deployment and Test Runbook
 
-This guide deploys and tests the S3/SQS CSV batch processor in `us-west-2`. Change the region consistently if you use another AWS region.
+This guide deploys and tests the S3-to-SQS CSV pipeline in `us-west-2`. Change the region consistently if you use another AWS region.
 
 ## Prerequisites
 
@@ -107,7 +107,7 @@ aws s3 cp 1K_RECORDS.csv \
   --region "${AWS_REGION}"
 ```
 
-The source bucket event invokes the dispatcher. It counts data lines after the header and invokes the processor asynchronously for each group of at most 500 lines. Each processor sends one SQS message containing the CSV header and a two-dimensional array of row values.
+The source bucket event invokes the dispatcher. It counts data lines after the header, parses groups of at most 1,000 lines, and sends one SQS message per group containing the CSV header and a two-dimensional array of row values.
 
 The loader event source mapping is configured with `batch_size = 1`, so each SQS message independently invokes the loader. Failed messages are retried and then moved to the SQS dead-letter queue after three receives.
 
@@ -126,13 +126,11 @@ Get the names of the deployed functions:
 
 ```bash
 DISPATCHER_FUNCTION=$(terraform -chdir=terraform output -raw dispatcher_lambda_name)
-PROCESSOR_FUNCTION=$(terraform -chdir=terraform output -raw processor_lambda_name)
 
 aws logs tail /aws/lambda/${DISPATCHER_FUNCTION} --since 15m
-aws logs tail /aws/lambda/${PROCESSOR_FUNCTION} --since 15m
 ```
 
-The dispatcher logs report the source object’s data-line and batch counts. The processor logs report each SQS message and its record count.
+The dispatcher logs report the source object’s data-line and batch counts.
 
 The loader consumes SQS messages and inserts each batch into MySQL. It creates the `payments_raw` and `loaded_sqs_messages` tables on first load, uses the source object identity as `run_id`, and skips duplicate deliveries for an already-loaded message:
 

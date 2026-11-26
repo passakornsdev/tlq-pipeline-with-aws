@@ -15,54 +15,60 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
 import com.passakornsdev.tlq.csv.saaf.Inspector;
-import software.amazon.awssdk.core.SdkBytes;
-import software.amazon.awssdk.services.lambda.LambdaClient;
-import software.amazon.awssdk.services.lambda.model.InvocationType;
-import software.amazon.awssdk.services.lambda.model.InvokeRequest;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
+import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironmentVariable;
 
 public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private static final int BATCH_SIZE = 1000;
     private static final int BATCHES_PER_DISPATCH_CYCLE = 50;
-    private static final long DISPATCH_CYCLE_INTERVAL_MILLIS = 2_000L;
+    private static final long DISPATCH_CYCLE_INTERVAL_MILLIS = 1_000L;
 
     private final S3Client s3Client;
-    private final LambdaClient lambdaClient;
+    private final SqsClient sqsClient;
     private final ObjectMapper objectMapper;
-    private final String processorFunctionName;
+    private final CsvRecordExtractor csvRecordExtractor;
+    private final String queueUrl;
     private final DatabaseConfig databaseConfig;
     private final PipelineInfoRepository pipelineInfoRepository;
 
     public DispatcherHandler() {
         this(
             S3Client.create(),
-            LambdaClient.create(),
+            SqsClient.create(),
             new ObjectMapper(),
-            requiredEnvironmentVariable("PROCESSOR_FUNCTION_NAME"),
+            new CsvRecordExtractor(),
+            requiredEnvironmentVariable("SQS_QUEUE_URL"),
             DatabaseConfig.fromEnvironment()
         );
     }
 
     DispatcherHandler(
         S3Client s3Client,
-        LambdaClient lambdaClient,
+        SqsClient sqsClient,
         ObjectMapper objectMapper,
-        String processorFunctionName,
+        CsvRecordExtractor csvRecordExtractor,
+        String queueUrl,
         DatabaseConfig databaseConfig
     ) {
         this.s3Client = s3Client;
-        this.lambdaClient = lambdaClient;
+        this.sqsClient = sqsClient;
         this.objectMapper = objectMapper;
-        this.processorFunctionName = processorFunctionName;
+        this.csvRecordExtractor = csvRecordExtractor;
+        this.queueUrl = queueUrl;
         this.databaseConfig = databaseConfig;
         this.pipelineInfoRepository = new PipelineInfoRepository(databaseConfig);
     }
@@ -153,23 +159,16 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                  batchesInCycle < BATCHES_PER_DISPATCH_CYCLE && startLine < dataLineCount;
                  batchesInCycle++) {
                 int endExclusiveLine = Math.min(startLine + BATCH_SIZE, dataLineCount);
-                ProcessingRequest request = new ProcessingRequest(
+                publishBatch(
                     sourceBucket,
                     sourceKey,
                     sourceVersionId,
                     Objects.requireNonNull(objectIdentity, "S3 event must include a version ID or sequencer"),
                     pipelineId,
-                    UUID.randomUUID().toString(),
                     startLine,
                     endExclusiveLine,
                     batchIndex
                 );
-
-                lambdaClient.invoke(InvokeRequest.builder()
-                    .functionName(processorFunctionName)
-                    .invocationType(InvocationType.EVENT)
-                    .payload(SdkBytes.fromUtf8String(serialize(request)))
-                    .build());
                 startLine = endExclusiveLine;
                 batchIndex++;
             }
@@ -185,15 +184,78 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         return batchIndex;
     }
 
+    private void publishBatch(
+        String sourceBucket,
+        String sourceKey,
+        String sourceVersionId,
+        String objectIdentity,
+        long pipelineId,
+        int startLine,
+        int endExclusiveLine,
+        int batchIndex
+    ) {
+        List<PaymentRecord> records = readBatch(
+            sourceBucket,
+            sourceKey,
+            sourceVersionId,
+            startLine,
+            endExclusiveLine
+        );
+        List<SqsBatchMessage.Row> rows = new ArrayList<>(records.size());
+        for (PaymentRecord record : records) {
+            rows.add(new SqsBatchMessage.Row(UUID.randomUUID().toString(), record.toValues()));
+        }
+
+        String batchUuid = UUID.randomUUID().toString();
+        String body = serialize(new SqsBatchMessage(PaymentRecord.headers(), rows));
+        sqsClient.sendMessage(SendMessageRequest.builder()
+            .queueUrl(queueUrl)
+            .messageBody(body)
+            .messageAttributes(Map.of(
+                "objectIdentity", stringAttribute(objectIdentity),
+                "sourceKey", stringAttribute(sourceKey),
+                "batchIndex", stringAttribute(Integer.toString(batchIndex)),
+                "pipelineId", stringAttribute(Long.toString(pipelineId)),
+                "batchUuid", stringAttribute(batchUuid)
+            ))
+            .build());
+    }
+
+    private List<PaymentRecord> readBatch(
+        String bucket,
+        String key,
+        String versionId,
+        int startLine,
+        int endExclusiveLine
+    ) {
+        GetObjectRequest.Builder request = GetObjectRequest.builder().bucket(bucket).key(key);
+        if (versionId != null && !versionId.isBlank()) {
+            request.versionId(versionId);
+        }
+
+        try (
+            ResponseInputStream<GetObjectResponse> input = s3Client.getObject(request.build());
+            BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
+        ) {
+            return csvRecordExtractor.extractRecords(reader, startLine, endExclusiveLine);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to read source object s3://%s/%s".formatted(bucket, key), exception);
+        }
+    }
+
+    private MessageAttributeValue stringAttribute(String value) {
+        return MessageAttributeValue.builder().dataType("String").stringValue(value).build();
+    }
+
     private int batchCount(int dataLineCount) {
         return dataLineCount / BATCH_SIZE + (dataLineCount % BATCH_SIZE == 0 ? 0 : 1);
     }
 
-    private String serialize(ProcessingRequest request) {
+    private String serialize(SqsBatchMessage message) {
         try {
-            return objectMapper.writeValueAsString(request);
+            return objectMapper.writeValueAsString(message);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Unable to serialize processing request", exception);
+            throw new IllegalStateException("Unable to serialize batch SQS message", exception);
         }
     }
 

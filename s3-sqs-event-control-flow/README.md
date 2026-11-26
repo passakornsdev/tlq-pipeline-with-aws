@@ -1,12 +1,11 @@
 # S3/SQS CSV Batch Processor
 
-Terraform deploys an S3 source bucket, an SQS batch queue with a dead-letter queue, and four Java 25 Lambda functions:
+Terraform deploys an S3 source bucket, an SQS batch queue with a dead-letter queue, and three Java 25 Lambda functions:
 
 1. Uploading a `.csv` file to the source bucket invokes the dispatcher.
-2. The dispatcher counts physical data lines after the header and asynchronously invokes the processor once per 500 lines.
-3. Each processor converts its assigned lines to `{ "header": [...], "rows": [[...], ...] }` and sends one message to SQS.
-4. An SQS event source mapping invokes the loader once per message; the loader inserts its records into a single-AZ MySQL RDS instance through RDS Proxy.
-5. After the final successful load, the query Lambda emails an aggregate CSV report through SES.
+2. The dispatcher counts physical data lines after the header, converts each group of at most 1,000 lines to `{ "header": [...], "rows": [[...], ...] }`, and sends one message per group directly to SQS.
+3. An SQS event source mapping invokes the loader once per message; the loader inserts its records into a single-AZ MySQL RDS instance through RDS Proxy.
+4. After the final successful load, the query Lambda emails an aggregate CSV report through SES.
 
 ## Prerequisites
 
