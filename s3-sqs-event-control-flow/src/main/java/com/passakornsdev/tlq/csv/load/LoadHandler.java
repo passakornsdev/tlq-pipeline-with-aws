@@ -89,9 +89,9 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
         context.getLogger().log(
             "Loader invocation started with %d SQS message(s).%n".formatted(event.getRecords().size())
         );
-        Object initializationTimeMetric = inspector.getAttribute("initializationTime");
-        if (!(initializationTimeMetric instanceof Number initializationTime)) {
-            throw new IllegalStateException("SAAF initializationTime is unavailable");
+        Object startTimeMetric = inspector.getAttribute("startTime");
+        if (!(startTimeMetric instanceof Number startTime)) {
+            throw new IllegalStateException("SAAF startTime is unavailable");
         }
         for (SQSEvent.SQSMessage message : event.getRecords()) {
             Long sqsSentAtMillis = optionalMessageAttribute(message, "sqsSentAtMs");
@@ -102,10 +102,10 @@ public class LoadHandler implements RequestHandler<SQSEvent, Void> {
                         .formatted(message.getMessageId())
                 );
             } else {
-                long sqsLatencyMillis = initializationTime.longValue() - sqsSentAtMillis;
+                long sqsLatencyMillis = startTime.longValue() - sqsSentAtMillis;
                 inspector.addAttribute("sqsLatencyMs", sqsLatencyMillis);
                 context.getLogger().log(
-                    "SQS message %s SAAF initializationTime minus send time: %d ms.%n"
+                    "SQS message %s SAAF startTime minus send time: %d ms.%n"
                         .formatted(message.getMessageId(), sqsLatencyMillis)
                 );
             }
