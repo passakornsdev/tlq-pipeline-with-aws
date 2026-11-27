@@ -7,11 +7,15 @@
 
 `configured_memory_mb` reflects current Terraform allocations, not measured peak memory or necessarily the allocation used when this run was captured.
 
-### Total pipeline execution time (ms)
+##### Total pipeline execution time: 107184ms
 
-| total\_pipeline\_time\_ms |
-| ---: |
-| 107184 |
+### Estimated Lambda cost (USD)
+
+Estimate uses current configured memory, SAAF average runtime, x86\_64 in us-east-2, and on-demand rates of $0.0000166667 per GB-second plus $0.20 per million requests. It excludes free tier, discounts, and non-Lambda charges such as SQS, S3, RDS, and CloudWatch Logs.
+
+| compute cost | request cost | total Lambda cost |
+| ---: | ---: | ---: |
+| $0.01913442 | $0.00020240 | $0.01933682 |
 
 ### SQS latency (ms)
 

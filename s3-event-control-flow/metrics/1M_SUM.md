@@ -6,12 +6,15 @@
 | s3-csv-batch-processor-query | 1024 | 1 | 5545 | 5545.0000 | 5545 |
 
 
-### Total Pipeline Execution Time
+##### Total Pipeline Execution Time: 95246ms
 
-| total\_pipeline\_time\_ms | total execution time |
-| :--- | :--- |
-| 95246 | 95.246 seconds |
+### Estimated Lambda Cost (USD)
 
+Using x86 on-demand rates in `us-east-2` ([AWS Lambda pricing](https://aws.amazon.com/lambda/pricing/)): $0.0000166667 per GB-second and $0.20 per million requests. Compute uses recorded SAAF runtime and configured memory; amounts are before free tier, discounts, and credits.
+
+| compute | requests | total |
+| ---: | ---: | ---: |
+| $0.04958782 | $0.00020240 | $0.04979022 |
 
 ### S3 Event and Loader Latency
 
