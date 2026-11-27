@@ -12,16 +12,58 @@ resource "aws_s3_bucket_versioning" "source" {
   bucket = aws_s3_bucket.source.id
 
   versioning_configuration {
-    status = "Enabled"
+    status = "Suspended"
   }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "source" {
+  bucket = aws_s3_bucket.source.id
+
+  rule {
+    id     = "expire-source-objects"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 1
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.source]
 }
 
 resource "aws_s3_bucket_versioning" "destination" {
   bucket = aws_s3_bucket.destination.id
 
   versioning_configuration {
-    status = "Enabled"
+    status = "Suspended"
   }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "destination" {
+  bucket = aws_s3_bucket.destination.id
+
+  rule {
+    id     = "expire-destination-objects"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 1
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.destination]
 }
 
 resource "aws_s3_bucket_public_access_block" "source" {

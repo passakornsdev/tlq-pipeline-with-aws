@@ -154,6 +154,11 @@ resource "aws_iam_role_policy" "processor" {
         Effect   = "Allow"
         Action   = "s3:PutObject"
         Resource = "${var.destination_bucket_arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.db_secret_arn
       }
     ]
   })
@@ -256,6 +261,15 @@ resource "aws_lambda_function" "processor" {
   vpc_config {
     subnet_ids         = var.subnet_ids
     security_group_ids = [var.lambda_security_group_id]
+  }
+
+  environment {
+    variables = {
+      DB_HOST       = var.db_host
+      DB_PORT       = tostring(var.db_port)
+      DB_NAME       = var.db_name
+      DB_SECRET_ARN = var.db_secret_arn
+    }
   }
 
   depends_on = [
