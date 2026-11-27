@@ -5,9 +5,12 @@ public record ProcessingRequest(
     String sourceKey,
     String sourceVersionId,
     String destinationBucket,
+    String sourceETag,
     String objectIdentity,
+    long headerEndByte,
+    long startByte,
+    long endExclusiveByte,
     int startLine,
-    int endExclusiveLine,
-    int batchIndex
+    int endExclusiveLine
 ) {
 }
