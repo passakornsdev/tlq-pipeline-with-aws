@@ -34,22 +34,22 @@ variable "lambda_security_group_id" {
 }
 
 variable "db_host" {
-  description = "Aurora endpoint for the loader Lambda."
+  description = "MySQL endpoint for the loader Lambda."
   type        = string
 }
 
 variable "db_port" {
-  description = "Aurora port for the loader Lambda."
+  description = "MySQL port for the loader Lambda."
   type        = number
 }
 
 variable "db_name" {
-  description = "Aurora database name for the loader Lambda."
+  description = "MySQL database name for the loader Lambda."
   type        = string
 }
 
 variable "db_secret_arn" {
-  description = "Secrets Manager ARN containing the Aurora credentials."
+  description = "Secrets Manager ARN containing the MySQL credentials."
   type        = string
 }
 

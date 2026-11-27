@@ -28,19 +28,19 @@ output "query_lambda_name" {
   value       = module.lambda.query_lambda_name
 }
 
-output "aurora_endpoint" {
-  description = "Aurora MySQL writer endpoint."
-  value       = module.aurora.endpoint
+output "database_endpoint" {
+  description = "Single-AZ MySQL RDS instance endpoint."
+  value       = module.database.endpoint
 }
 
-output "aurora_proxy_endpoint" {
-  description = "Aurora RDS Proxy endpoint used by the loader Lambda."
-  value       = module.aurora.proxy_endpoint
+output "database_proxy_endpoint" {
+  description = "RDS Proxy endpoint used by the Lambda functions."
+  value       = module.database.proxy_endpoint
 }
 
-output "aurora_secret_arn" {
-  description = "ARN of the Aurora-managed Secrets Manager database credentials secret."
-  value       = module.aurora.secret_arn
+output "database_secret_arn" {
+  description = "ARN of the RDS-managed Secrets Manager database credentials secret."
+  value       = module.database.secret_arn
 }
 
 output "bastion_instance_id" {

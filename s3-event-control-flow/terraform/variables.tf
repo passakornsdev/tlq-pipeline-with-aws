@@ -35,20 +35,20 @@ variable "tags" {
   default     = {}
 }
 
-variable "aurora_instance_class" {
-  description = "Instance class for the Aurora MySQL writer instance."
+variable "db_instance_class" {
+  description = "Instance class for the single-AZ MySQL RDS instance."
   type        = string
-  default     = "db.t4g.large"
+  default     = "db.m7g.xlarge"
 }
 
 variable "db_port" {
-  description = "Aurora MySQL port exposed to the loader Lambda."
+  description = "MySQL port exposed to the loader Lambda."
   type        = number
   default     = 3306
 }
 
 variable "db_name" {
-  description = "Aurora database name used by the loader Lambda."
+  description = "MySQL database name used by the loader Lambda."
   type        = string
   default     = "tlq"
 }

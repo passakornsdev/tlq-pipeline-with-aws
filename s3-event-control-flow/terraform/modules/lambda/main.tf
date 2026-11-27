@@ -74,25 +74,25 @@ resource "aws_iam_role" "query" {
 
 resource "aws_cloudwatch_log_group" "dispatcher" {
   name              = "/aws/lambda/${local.dispatcher_name}"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "processor" {
   name              = "/aws/lambda/${local.processor_name}"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "loader" {
   name              = "/aws/lambda/${var.project_name}-loader"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "query" {
   name              = "/aws/lambda/${local.query_name}"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
@@ -249,7 +249,7 @@ resource "aws_lambda_function" "processor" {
   handler          = "com.passakornsdev.tlq.csv.transform.ProcessorHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1024
+  memory_size      = 640
   timeout          = 900
   tags             = var.tags
 
@@ -272,7 +272,7 @@ resource "aws_lambda_function" "dispatcher" {
   handler          = "com.passakornsdev.tlq.csv.transform.DispatcherHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1024
+  memory_size      = 1769
   timeout          = 900
   tags             = var.tags
 
@@ -306,8 +306,8 @@ resource "aws_lambda_function" "loader" {
   handler          = "com.passakornsdev.tlq.csv.load.LoadHandler::handleRequest"
   filename         = var.lambda_filename
   source_code_hash = filebase64sha256(var.lambda_filename)
-  memory_size      = 1024
-  timeout          = 900
+  memory_size      = 640
+  timeout          = 300
   tags             = var.tags
 
   vpc_config {
@@ -372,6 +372,11 @@ resource "aws_lambda_permission" "source_invokes_dispatcher" {
   function_name = aws_lambda_function.dispatcher.function_name
   principal     = "s3.amazonaws.com"
   source_arn    = var.source_bucket_arn
+}
+
+resource "aws_lambda_function_event_invoke_config" "dispatcher" {
+  function_name          = aws_lambda_function.dispatcher.function_name
+  maximum_retry_attempts = 0
 }
 
 resource "aws_lambda_permission" "destination_invokes_loader" {

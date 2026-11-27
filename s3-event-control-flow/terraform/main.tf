@@ -45,21 +45,22 @@ module "lambda" {
   destination_bucket_arn   = module.s3.destination_bucket_arn
   subnet_ids               = [module.vpc.primary_subnet_id]
   lambda_security_group_id = module.vpc.lambda_security_group_id
-  db_host                  = module.aurora.proxy_endpoint
+  db_host                  = module.database.proxy_endpoint
   db_port                  = var.db_port
   db_name                  = var.db_name
-  db_secret_arn            = module.aurora.secret_arn
+  db_secret_arn            = module.database.secret_arn
   ses_from_email           = var.ses_from_email
   ses_to_email             = var.ses_to_email
   lambda_filename          = "${path.root}/../target/s3-event-control-flow-lambda.jar"
   tags                     = local.common_tags
 }
 
-module "aurora" {
-  source = "./modules/aurora"
+module "database" {
+  source = "./modules/database"
 
   project_name              = var.project_name
-  instance_class            = var.aurora_instance_class
+  instance_class            = var.db_instance_class
+  database_name             = var.db_name
   availability_zone         = module.vpc.primary_availability_zone
   subnet_ids                = module.vpc.database_subnet_ids
   vpc_id                    = module.vpc.vpc_id
