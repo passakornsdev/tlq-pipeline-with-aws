@@ -22,8 +22,8 @@
 
 ### RDS Metrics
 
-![img.png](rds-metrics/img_3.png)
+![img.png](rds-metrics/3M/img_3.png)
 
-![img.png](rds-metrics/img_4.png)
+![img.png](rds-metrics/3M/img_4.png)
 
-![img.png](rds-metrics/img_5.png)
+![img.png](rds-metrics/3M/img_5.png)

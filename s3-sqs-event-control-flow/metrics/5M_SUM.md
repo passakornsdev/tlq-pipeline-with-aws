@@ -22,8 +22,8 @@
 
 ### Database Metrics
 
-![img_2.png](rds-metrics/img_2.png)
+![img_2.png](rds-metrics/5M/img_2.png)
 
-![img.png](rds-metrics/img.png)
+![img.png](rds-metrics/5M/img.png)
 
-![img_1.png](rds-metrics/img_1.png)
+![img_1.png](rds-metrics/5M/img_1.png)

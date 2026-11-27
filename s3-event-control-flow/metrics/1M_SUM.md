@@ -1,9 +1,9 @@
-| function\_name | count\(function\_name\) | min\(runtime\) | avg\(runtime\) | max\(runtime\) |
-| :--- | :--- | :--- | :--- | :--- |
-| s3-csv-batch-processor-dispatcher | 1 | 44058 | 44058.0000 | 44058 |
-| s3-csv-batch-processor-loader | 1000 | 673 | 4265.3770 | 9033 |
-| s3-csv-batch-processor-processor | 10 | 34884 | 36439.3000 | 37937 |
-| s3-csv-batch-processor-query | 1 | 5545 | 5545.0000 | 5545 |
+| function\_name | configured\_memory\_mb | count\(function\_name\) | min\(runtime\) | avg\(runtime\) | max\(runtime\) |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| s3-csv-batch-processor-dispatcher | 1769 | 1 | 44058 | 44058.0000 | 44058 |
+| s3-csv-batch-processor-loader | 640 | 1000 | 673 | 4265.3770 | 9033 |
+| s3-csv-batch-processor-processor | 640 | 10 | 34884 | 36439.3000 | 37937 |
+| s3-csv-batch-processor-query | 1024 | 1 | 5545 | 5545.0000 | 5545 |
 
 
 ### Total Pipeline Execution Time
@@ -22,8 +22,8 @@
 
 ### RDS Metrics
 
-![img.png](img/img_5.png)
+![img.png](img/1M/img_5.png)
 
-![img_1.png](img/img_4.png)
+![img_1.png](img/1M/img_4.png)
 
-![img_2.png](img/img_3.png)
+![img_2.png](img/1M/img_3.png)
