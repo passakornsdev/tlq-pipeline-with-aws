@@ -32,7 +32,7 @@ public record DatabaseConfig(String host, int port, String database, String user
     }
 
     public Connection openConnection() throws SQLException {
-        String url = "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=true&serverTimezone=UTC"
+        String url = "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=true&serverTimezone=UTC&rewriteBatchedStatements=true"
             .formatted(host, port, database);
         return DriverManager.getConnection(url, username, password);
     }
