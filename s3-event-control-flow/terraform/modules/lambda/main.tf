@@ -379,6 +379,11 @@ resource "aws_lambda_function_event_invoke_config" "dispatcher" {
   maximum_retry_attempts = 0
 }
 
+resource "aws_lambda_function_event_invoke_config" "processor" {
+  function_name          = aws_lambda_function.processor.function_name
+  maximum_retry_attempts = 0
+}
+
 resource "aws_lambda_permission" "destination_invokes_loader" {
   statement_id  = "AllowDestinationBucketInvocation"
   action        = "lambda:InvokeFunction"
