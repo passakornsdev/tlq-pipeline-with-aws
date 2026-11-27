@@ -7,6 +7,12 @@
 
 `configured_memory_mb` reflects current Terraform allocations, not measured peak memory or necessarily the allocation used when this run was captured.
 
+### Total pipeline execution time (ms)
+
+| total\_pipeline\_time\_ms |
+| ---: |
+| 691732 |
+
 ### SQS latency (ms)
 
 | min\(sqs\_latency\_ms\) | avg\(sqs\_latency\_ms\) | max\(sqs\_latency\_ms\) |

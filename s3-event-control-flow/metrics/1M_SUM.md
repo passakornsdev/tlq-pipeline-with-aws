@@ -6,6 +6,13 @@
 | s3-csv-batch-processor-query | 1 | 5545 | 5545.0000 | 5545 |
 
 
+### Total Pipeline Execution Time
+
+| total\_pipeline\_time\_ms | total execution time |
+| :--- | :--- |
+| 95246 | 95.246 seconds |
+
+
 ### S3 Event and Loader Latency
 
 | min\(s3\_latency\_ms\) | avg\(s3\_latency\_ms\) | max\(s3\_latency\_ms\) |
