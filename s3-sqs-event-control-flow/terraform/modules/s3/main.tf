@@ -7,7 +7,26 @@ resource "aws_s3_bucket_versioning" "source" {
   bucket = aws_s3_bucket.source.id
 
   versioning_configuration {
+    status = "Suspended"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "source" {
+  bucket = aws_s3_bucket.source.id
+
+  rule {
+    id     = "expire-source-objects-after-one-day"
     status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 1
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
   }
 }
 
