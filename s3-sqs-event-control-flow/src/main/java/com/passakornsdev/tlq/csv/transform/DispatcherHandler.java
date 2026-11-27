@@ -9,9 +9,10 @@ import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
 import com.passakornsdev.tlq.csv.database.SaafInvocationRepository;
 import com.passakornsdev.tlq.csv.database.SaafInvocationRecorder;
-import java.io.BufferedReader;
+import com.passakornsdev.tlq.csv.saaf.Inspector;
+import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.PushbackInputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -19,29 +20,26 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
-
-import com.passakornsdev.tlq.csv.saaf.Inspector;
+import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.lambda.LambdaClient;
+import software.amazon.awssdk.services.lambda.model.InvocationType;
+import software.amazon.awssdk.services.lambda.model.InvokeRequest;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.services.sqs.SqsClient;
-import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
-import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 import static com.passakornsdev.tlq.csv.util.CommonValidator.requiredEnvironmentVariable;
 
 public class DispatcherHandler implements RequestHandler<S3Event, Void> {
-    private static final int BATCH_SIZE = 1000;
+    private static final int PROCESSOR_LINE_COUNT = 100_000;
+    private static final int SQS_BATCH_SIZE = 1_000;
 
     private final S3Client s3Client;
-    private final SqsClient sqsClient;
+    private final LambdaClient lambdaClient;
     private final ObjectMapper objectMapper;
-    private final CsvRecordExtractor csvRecordExtractor;
-    private final String queueUrl;
+    private final String processorFunctionName;
     private final DatabaseConfig databaseConfig;
     private final PipelineInfoRepository pipelineInfoRepository;
     private final SaafInvocationRepository invocationRepository;
@@ -50,27 +48,24 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     public DispatcherHandler() {
         this(
             S3Client.create(),
-            SqsClient.create(),
+            LambdaClient.create(),
             new ObjectMapper(),
-            new CsvRecordExtractor(),
-            requiredEnvironmentVariable("SQS_QUEUE_URL"),
+            requiredEnvironmentVariable("PROCESSOR_FUNCTION_NAME"),
             DatabaseConfig.fromEnvironment()
         );
     }
 
     DispatcherHandler(
         S3Client s3Client,
-        SqsClient sqsClient,
+        LambdaClient lambdaClient,
         ObjectMapper objectMapper,
-        CsvRecordExtractor csvRecordExtractor,
-        String queueUrl,
+        String processorFunctionName,
         DatabaseConfig databaseConfig
     ) {
         this.s3Client = s3Client;
-        this.sqsClient = sqsClient;
+        this.lambdaClient = lambdaClient;
         this.objectMapper = objectMapper;
-        this.csvRecordExtractor = csvRecordExtractor;
-        this.queueUrl = queueUrl;
+        this.processorFunctionName = processorFunctionName;
         this.databaseConfig = databaseConfig;
         this.pipelineInfoRepository = new PipelineInfoRepository(databaseConfig);
         this.invocationRepository = new SaafInvocationRepository(databaseConfig);
@@ -104,20 +99,20 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                 ? record.getS3().getObject().getSequencer()
                 : versionId;
 
-            int dataLineCount = countDataLines(bucket, key, versionId);
-            int batchCount = batchCount(dataLineCount);
-            long pipelineId = pipelineInfoRepository.createPipeline(batchCount);
-            int dispatchedCount = dispatchBatches(
+            SourceFileInfo sourceFileInfo = inspectSourceObject(bucket, key, versionId);
+            int sqsMessageCount = sqsMessageCount(sourceFileInfo.dataLineCount());
+            long pipelineId = pipelineInfoRepository.createPipeline(sqsMessageCount);
+            int dispatchedCount = dispatchProcessors(
                 bucket,
                 key,
                 versionId,
                 objectIdentity,
                 pipelineId,
-                dataLineCount
+                sourceFileInfo
             );
             context.getLogger().log(
-                "Dispatched %d batches for s3://%s/%s containing %d data lines.%n"
-                    .formatted(dispatchedCount, bucket, key, dataLineCount)
+                "Dispatched %d processors for s3://%s/%s containing %d data lines.%n"
+                    .formatted(dispatchedCount, bucket, key, sourceFileInfo.dataLineCount())
             );
         }
         return null;
@@ -135,133 +130,146 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         }
     }
 
-    private int countDataLines(String bucket, String key, String versionId) {
+    private SourceFileInfo inspectSourceObject(String bucket, String key, String versionId) {
         GetObjectRequest.Builder request = GetObjectRequest.builder().bucket(bucket).key(key);
         if (versionId != null && !versionId.isBlank()) {
             request.versionId(versionId);
         }
 
         try (
-            ResponseInputStream<GetObjectResponse> input = s3Client.getObject(request.build());
-            BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
+            ResponseInputStream<GetObjectResponse> objectInput = s3Client.getObject(request.build());
+            PushbackInputStream input = new PushbackInputStream(new BufferedInputStream(objectInput), 1)
         ) {
-            if (reader.readLine() == null) {
-                return 0;
+            SourceFileScan scan = new SourceFileScan();
+            long byteOffset = 0;
+            long lineStartByte = 0;
+            int value;
+            while ((value = input.read()) != -1) {
+                byteOffset++;
+                if (value != '\r' && value != '\n') {
+                    continue;
+                }
+                if (value == '\r') {
+                    int next = input.read();
+                    if (next == '\n') {
+                        byteOffset++;
+                    } else if (next != -1) {
+                        input.unread(next);
+                    }
+                }
+                scan.recordLineEnd(byteOffset);
+                lineStartByte = byteOffset;
             }
 
-            int count = 0;
-            while (reader.readLine() != null) {
-                count++;
+            if (lineStartByte < byteOffset) {
+                scan.recordLineEnd(byteOffset);
             }
-            return count;
+            return scan.finish(byteOffset, objectInput.response().eTag());
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to read source object s3://%s/%s".formatted(bucket, key), exception);
         }
     }
 
-    private int dispatchBatches(
+    private int dispatchProcessors(
         String sourceBucket,
         String sourceKey,
         String sourceVersionId,
         String objectIdentity,
         long pipelineId,
-        int dataLineCount
+        SourceFileInfo sourceFileInfo
     ) {
-        int batchIndex = 0;
-        int startLine = 0;
-        while (startLine < dataLineCount) {
-            int endExclusiveLine = Math.min(startLine + BATCH_SIZE, dataLineCount);
-            publishBatch(
+        int processorCount = 0;
+        for (ProcessorRange range : sourceFileInfo.processorRanges()) {
+            ProcessingRequest request = new ProcessingRequest(
                 sourceBucket,
                 sourceKey,
                 sourceVersionId,
+                sourceFileInfo.sourceETag(),
                 Objects.requireNonNull(objectIdentity, "S3 event must include a version ID or sequencer"),
                 pipelineId,
-                startLine,
-                endExclusiveLine,
-                batchIndex
+                sourceFileInfo.headerEndByte(),
+                range.startByte(),
+                range.endExclusiveByte(),
+                range.startLine(),
+                range.endExclusiveLine()
             );
-            startLine = endExclusiveLine;
-            batchIndex++;
+            invokeProcessor(request);
+            processorCount++;
         }
-        return batchIndex;
+        return processorCount;
     }
 
-    private void publishBatch(
-        String sourceBucket,
-        String sourceKey,
-        String sourceVersionId,
-        String objectIdentity,
-        long pipelineId,
-        int startLine,
-        int endExclusiveLine,
-        int batchIndex
-    ) {
-        List<PaymentRecord> records = readBatch(
-            sourceBucket,
-            sourceKey,
-            sourceVersionId,
-            startLine,
-            endExclusiveLine
-        );
-        List<SqsBatchMessage.Row> rows = new ArrayList<>(records.size());
-        for (PaymentRecord record : records) {
-            rows.add(new SqsBatchMessage.Row(UUID.randomUUID().toString(), record.toValues()));
-        }
-
-        String batchUuid = UUID.randomUUID().toString();
-        String body = serialize(new SqsBatchMessage(PaymentRecord.headers(), rows));
-        long sqsSentAtMillis = System.currentTimeMillis();
-        sqsClient.sendMessage(SendMessageRequest.builder()
-            .queueUrl(queueUrl)
-            .messageBody(body)
-            .messageAttributes(Map.of(
-                "objectIdentity", stringAttribute(objectIdentity),
-                "sourceKey", stringAttribute(sourceKey),
-                "batchIndex", stringAttribute(Integer.toString(batchIndex)),
-                "pipelineId", stringAttribute(Long.toString(pipelineId)),
-                "batchUuid", stringAttribute(batchUuid),
-                "sqsSentAtMs", stringAttribute(Long.toString(sqsSentAtMillis))
-            ))
+    private void invokeProcessor(ProcessingRequest request) {
+        lambdaClient.invoke(InvokeRequest.builder()
+            .functionName(processorFunctionName)
+            .invocationType(InvocationType.EVENT)
+            .payload(SdkBytes.fromUtf8String(serialize(request)))
             .build());
     }
 
-    private List<PaymentRecord> readBatch(
-        String bucket,
-        String key,
-        String versionId,
-        int startLine,
-        int endExclusiveLine
-    ) {
-        GetObjectRequest.Builder request = GetObjectRequest.builder().bucket(bucket).key(key);
-        if (versionId != null && !versionId.isBlank()) {
-            request.versionId(versionId);
-        }
-
-        try (
-            ResponseInputStream<GetObjectResponse> input = s3Client.getObject(request.build());
-            BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
-        ) {
-            return csvRecordExtractor.extractRecords(reader, startLine, endExclusiveLine);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Unable to read source object s3://%s/%s".formatted(bucket, key), exception);
-        }
+    private int sqsMessageCount(int dataLineCount) {
+        return dataLineCount / SQS_BATCH_SIZE + (dataLineCount % SQS_BATCH_SIZE == 0 ? 0 : 1);
     }
 
-    private MessageAttributeValue stringAttribute(String value) {
-        return MessageAttributeValue.builder().dataType("String").stringValue(value).build();
-    }
-
-    private int batchCount(int dataLineCount) {
-        return dataLineCount / BATCH_SIZE + (dataLineCount % BATCH_SIZE == 0 ? 0 : 1);
-    }
-
-    private String serialize(SqsBatchMessage message) {
+    private String serialize(ProcessingRequest request) {
         try {
-            return objectMapper.writeValueAsString(message);
+            return objectMapper.writeValueAsString(request);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Unable to serialize batch SQS message", exception);
+            throw new IllegalStateException("Unable to serialize processing request", exception);
         }
     }
 
+    private record SourceFileInfo(
+        long headerEndByte,
+        int dataLineCount,
+        String sourceETag,
+        List<ProcessorRange> processorRanges
+    ) {
+    }
+
+    private record ProcessorRange(int startLine, int endExclusiveLine, long startByte, long endExclusiveByte) {
+    }
+
+    private static class SourceFileScan {
+        private final List<ProcessorRange> ranges = new ArrayList<>();
+        private long headerEndByte = -1;
+        private long rangeStartByte;
+        private int dataLineCount;
+        private int rangeStartLine;
+
+        private void recordLineEnd(long endExclusiveByte) {
+            if (headerEndByte < 0) {
+                headerEndByte = endExclusiveByte;
+                rangeStartByte = endExclusiveByte;
+                return;
+            }
+
+            dataLineCount++;
+            if (dataLineCount - rangeStartLine == PROCESSOR_LINE_COUNT) {
+                ranges.add(new ProcessorRange(
+                    rangeStartLine,
+                    dataLineCount,
+                    rangeStartByte,
+                    endExclusiveByte
+                ));
+                rangeStartLine = dataLineCount;
+                rangeStartByte = endExclusiveByte;
+            }
+        }
+
+        private SourceFileInfo finish(long objectEndByte, String sourceETag) {
+            if (headerEndByte < 0) {
+                headerEndByte = objectEndByte;
+            }
+            if (dataLineCount > rangeStartLine) {
+                ranges.add(new ProcessorRange(
+                    rangeStartLine,
+                    dataLineCount,
+                    rangeStartByte,
+                    objectEndByte
+                ));
+            }
+            return new SourceFileInfo(headerEndByte, dataLineCount, sourceETag, List.copyOf(ranges));
+        }
+    }
 }

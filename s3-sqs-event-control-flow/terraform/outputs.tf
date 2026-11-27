@@ -13,6 +13,11 @@ output "dispatcher_lambda_name" {
   value       = module.lambda.dispatcher_lambda_name
 }
 
+output "processor_lambda_name" {
+  description = "Name of the CSV transform processor Lambda function."
+  value       = module.lambda.processor_lambda_name
+}
+
 output "loader_lambda_name" {
   description = "Name of the SQS batch loader Lambda function."
   value       = module.lambda.loader_lambda_name

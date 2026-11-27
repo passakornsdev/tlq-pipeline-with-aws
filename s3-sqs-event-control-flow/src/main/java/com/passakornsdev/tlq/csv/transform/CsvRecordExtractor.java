@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -39,6 +40,52 @@ public class CsvRecordExtractor {
             throw new IllegalArgumentException("Source object ended before the assigned line range");
         }
         return records;
+    }
+
+    public void extractBatches(
+        BufferedReader reader,
+        int startLine,
+        int endExclusiveLine,
+        int batchSize,
+        BiConsumer<Integer, List<PaymentRecord>> batchConsumer
+    ) throws IOException {
+        if (startLine < 0 || endExclusiveLine < startLine) {
+            throw new IllegalArgumentException("Invalid source line range");
+        }
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("Batch size must be positive");
+        }
+
+        int expectedLineCount = endExclusiveLine - startLine;
+        List<PaymentRecord> batch = new ArrayList<>(Math.min(batchSize, expectedLineCount));
+        int batchOffset = 0;
+        int lineNumber = startLine;
+        while (lineNumber < endExclusiveLine) {
+            String line = reader.readLine();
+            if (line == null) {
+                throw new IllegalArgumentException("Source object ended before the assigned line range");
+            }
+            batch.add(PaymentRecord.fromValues(parseSingleRecord(line, "data line " + lineNumber)));
+            lineNumber++;
+            if (batch.size() == batchSize) {
+                batchConsumer.accept(batchOffset++, List.copyOf(batch));
+                batch.clear();
+            }
+        }
+        if (reader.readLine() != null) {
+            throw new IllegalArgumentException("Source object contains more lines than the assigned range");
+        }
+        if (!batch.isEmpty()) {
+            batchConsumer.accept(batchOffset, List.copyOf(batch));
+        }
+    }
+
+    public void validateHeader(BufferedReader reader) throws IOException {
+        String header = reader.readLine();
+        if (header == null) {
+            throw new IllegalArgumentException("Source object has no CSV header");
+        }
+        PaymentRecord.validateHeaders(parseSingleRecord(header, "header"));
     }
 
     private List<String> parseSingleRecord(String line, String description) {
