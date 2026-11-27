@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
+import com.passakornsdev.tlq.csv.database.SaafInvocationRecorder;
 import com.passakornsdev.tlq.csv.saaf.Inspector;
 import com.passakornsdev.tlq.csv.transform.BatchPayload;
 import java.io.IOException;
@@ -31,6 +32,7 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
     private final ObjectMapper objectMapper;
     private final LoadRepository repository;
     private final PipelineInfoRepository pipelineInfoRepository;
+    private final SaafInvocationRecorder invocationRecorder;
     private final String queryFunctionName;
 
     public LoadHandler() {
@@ -56,6 +58,7 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
             objectMapper,
             new LoadRepository(databaseConfig),
             new PipelineInfoRepository(databaseConfig),
+            new SaafInvocationRecorder(databaseConfig),
             queryFunctionName
         );
     }
@@ -66,6 +69,7 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
         ObjectMapper objectMapper,
         LoadRepository repository,
         PipelineInfoRepository pipelineInfoRepository,
+        SaafInvocationRecorder invocationRecorder,
         String queryFunctionName
     ) {
         this.s3Client = s3Client;
@@ -73,13 +77,27 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
         this.objectMapper = objectMapper;
         this.repository = repository;
         this.pipelineInfoRepository = pipelineInfoRepository;
+        this.invocationRecorder = invocationRecorder;
         this.queryFunctionName = queryFunctionName;
     }
 
     @Override
     public Void handleRequest(S3Event event, Context context) {
         Inspector inspector = new Inspector();
-        inspector.inspectAll();
+        Throwable failure = null;
+        try {
+            return processRequest(event, context, inspector);
+        } catch (RuntimeException | Error exception) {
+            failure = exception;
+            throw exception;
+        } finally {
+            invocationRecorder.record(inspector, context, failure);
+        }
+    }
+
+    private Void processRequest(S3Event event, Context context, Inspector inspector) {
+        inspector.inspectContainer();
+        recordS3Latency(event, context, inspector);
 
         for (S3Event.S3EventNotificationRecord record : event.getRecords()) {
             String bucket = record.getS3().getBucket().getName();
@@ -106,9 +124,34 @@ public class LoadHandler implements RequestHandler<S3Event, Void> {
                     )
             );
         }
-        inspector.inspectAllDeltas();
-        context.getLogger().log(inspector.finish().toString());
         return null;
+    }
+
+    private void recordS3Latency(S3Event event, Context context, Inspector inspector) {
+        if (event.getRecords() == null || event.getRecords().size() != 1) {
+            inspector.addAttribute("s3LatencyMs", null);
+            context.getLogger().log(
+                "Expected one S3 object record per loader invocation; s3 latency will be stored as NULL.%n"
+                    .formatted()
+            );
+            return;
+        }
+
+        S3Event.S3EventNotificationRecord record = event.getRecords().get(0);
+        if (record.getEventTime() == null) {
+            inspector.addAttribute("s3LatencyMs", null);
+            context.getLogger().log(
+                "S3 event %s has no event time; latency will be stored as NULL.%n"
+                    .formatted(context.getAwsRequestId())
+            );
+            return;
+        }
+
+        Object startTimeMetric = inspector.getAttribute("startTime");
+        if (!(startTimeMetric instanceof Number startTime)) {
+            throw new IllegalStateException("SAAF startTime is unavailable");
+        }
+        inspector.addAttribute("s3LatencyMs", startTime.longValue() - record.getEventTime().getMillis());
     }
 
     private List<List<String>> readRecords(String bucket, String objectKey, String versionId) {

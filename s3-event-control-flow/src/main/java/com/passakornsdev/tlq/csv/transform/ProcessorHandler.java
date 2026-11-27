@@ -2,6 +2,8 @@ package com.passakornsdev.tlq.csv.transform;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
+import com.passakornsdev.tlq.csv.database.DatabaseConfig;
+import com.passakornsdev.tlq.csv.database.SaafInvocationRecorder;
 import com.passakornsdev.tlq.csv.saaf.Inspector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
@@ -23,25 +25,45 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
     private final S3Client s3Client;
     private final ObjectMapper objectMapper;
     private final CsvRecordExtractor csvRecordExtractor;
+    private final SaafInvocationRecorder invocationRecorder;
 
     public ProcessorHandler() {
-        this(S3Client.create(), new ObjectMapper(), new CsvRecordExtractor());
+        this(
+            S3Client.create(),
+            new ObjectMapper(),
+            new CsvRecordExtractor(),
+            new SaafInvocationRecorder(DatabaseConfig.fromEnvironment())
+        );
     }
 
     ProcessorHandler(
         S3Client s3Client,
         ObjectMapper objectMapper,
-        CsvRecordExtractor csvRecordExtractor
+        CsvRecordExtractor csvRecordExtractor,
+        SaafInvocationRecorder invocationRecorder
     ) {
         this.s3Client = s3Client;
         this.objectMapper = objectMapper;
         this.csvRecordExtractor = csvRecordExtractor;
+        this.invocationRecorder = invocationRecorder;
     }
 
     @Override
     public Void handleRequest(ProcessingRequest request, Context context) {
         Inspector inspector = new Inspector();
-        inspector.inspectAll();
+        Throwable failure = null;
+        try {
+            return processRequest(request, context, inspector);
+        } catch (RuntimeException | Error exception) {
+            failure = exception;
+            throw exception;
+        } finally {
+            invocationRecorder.record(inspector, context, failure);
+        }
+    }
+
+    private Void processRequest(ProcessingRequest request, Context context, Inspector inspector) {
+        inspector.inspectContainer();
 
         validateRequest(request);
         int outputObjectCount = writeBatches(request);
@@ -56,8 +78,6 @@ public class ProcessorHandler implements RequestHandler<ProcessingRequest, Void>
                     request.sourceKey()
                 )
         );
-        inspector.inspectAllDeltas();
-        context.getLogger().log(inspector.finish().toString());
         return null;
     }
 

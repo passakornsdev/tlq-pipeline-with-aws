@@ -7,6 +7,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.passakornsdev.tlq.csv.database.DatabaseConfig;
 import com.passakornsdev.tlq.csv.database.PipelineInfoRepository;
+import com.passakornsdev.tlq.csv.database.SaafInvocationRecorder;
+import com.passakornsdev.tlq.csv.database.SaafInvocationRepository;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.PushbackInputStream;
@@ -41,6 +43,8 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
     private final String destinationBucket;
     private final DatabaseConfig databaseConfig;
     private final PipelineInfoRepository pipelineInfoRepository;
+    private final SaafInvocationRepository invocationRepository;
+    private final SaafInvocationRecorder invocationRecorder;
 
     public DispatcherHandler() {
         this(
@@ -68,13 +72,27 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
         this.destinationBucket = destinationBucket;
         this.databaseConfig = databaseConfig;
         this.pipelineInfoRepository = new PipelineInfoRepository(databaseConfig);
+        this.invocationRepository = new SaafInvocationRepository(databaseConfig);
+        this.invocationRecorder = new SaafInvocationRecorder(invocationRepository);
     }
 
     @Override
     public Void handleRequest(S3Event event, Context context) {
-        //Collect inital data.
         Inspector inspector = new Inspector();
-        inspector.inspectAll();
+        Throwable failure = null;
+        try {
+            return processRequest(event, context, inspector);
+        } catch (RuntimeException | Error exception) {
+            failure = exception;
+            throw exception;
+        } finally {
+            invocationRecorder.record(inspector, context, failure);
+        }
+    }
+
+    private Void processRequest(S3Event event, Context context, Inspector inspector) {
+        invocationRepository.ensureSchema();
+        inspector.inspectContainer();
 
         dropAllTables();
         context.getLogger().log("Dropped all tables from the configured database.%n");
@@ -102,8 +120,6 @@ public class DispatcherHandler implements RequestHandler<S3Event, Void> {
                     .formatted(dispatchedCount, bucket, key, dataLineCount)
             );
         }
-        inspector.inspectAllDeltas();
-        context.getLogger().log(inspector.finish().toString());
         return null;
     }
 

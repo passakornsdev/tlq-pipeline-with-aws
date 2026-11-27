@@ -5,8 +5,11 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.TimeZone;
 
 final class PaymentQueryRepository {
     private static final String AMOUNT_SUM = """
@@ -23,6 +26,34 @@ final class PaymentQueryRepository {
 
     PaymentQueryRepository(DatabaseConfig databaseConfig) {
         this.databaseConfig = databaseConfig;
+    }
+
+    Long latestDispatcherStartTime(String dispatcherFunctionName, long queryStartTimeMillis) {
+        String sql = """
+            SELECT start_time
+            FROM saaf_invocations
+            WHERE function_name = ?
+                AND start_time <= ?
+            ORDER BY start_time DESC
+            LIMIT 1
+            """;
+        try (Connection connection = databaseConfig.openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, dispatcherFunctionName);
+            statement.setTimestamp(
+                2,
+                Timestamp.from(java.time.Instant.ofEpochMilli(queryStartTimeMillis)),
+                Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+            );
+            try (ResultSet results = statement.executeQuery()) {
+                if (!results.next()) {
+                    return null;
+                }
+                return results.getTimestamp(1, Calendar.getInstance(TimeZone.getTimeZone("UTC"))).getTime();
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to find the latest dispatcher invocation", exception);
+        }
     }
 
     PaymentAggregateResponse query() {
