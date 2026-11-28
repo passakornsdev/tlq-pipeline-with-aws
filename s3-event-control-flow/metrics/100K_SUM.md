@@ -25,8 +25,8 @@ Using x86 on-demand rates in `us-east-2` ([AWS Lambda pricing](https://aws.amazo
 
 ### RDS Metrics
 
-![img.png](img/100K/img.png)
+![img.png](rds-metrics/100K/img.png)
 
-![img_2.png](img/100K/img_2.png)
+![img_2.png](rds-metrics/100K/img_2.png)
 
-![img_1.png](img/100K/img_1.png)
+![img_1.png](rds-metrics/100K/img_1.png)
